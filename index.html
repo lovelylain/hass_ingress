@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Home Assistant Sidebar Swipe Demo</title>
+    <script type="module" src="/src/hass-sidebar-swipe.ts"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      home-assistant-main {
+        display: block;
+        height: 100vh;
+      }
+      ha-drawer {
+        position: absolute;
+        z-index: 1;
+        top: 0;
+        display: block;
+        height: 100vh;
+        width: 33%;
+        background-color: #ccc;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+      }
+      ha-drawer[open] {
+        transform: translateX(0);
+      }
+      #menu {
+        cursor: pointer;
+        position: relative;
+        z-index: 1;
+        border: none;
+        width: 36px;
+        height: 36px;
+        font-size: 30px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        background-color: transparent;
+      }
+      .start-threshold {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 10%;
+        background-color: rgba(20, 188, 188);
+        writing-mode: vertical-rl;
+        text-align: center;
+        line-height: calc(100vw * 0.1);
+      }
+      .end-threshold {
+        position: absolute;
+        left: 13%;
+        top: 0;
+        height: 100%;
+        writing-mode: vertical-rl;
+        border-left: 1px solid #000;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <home-assistant>
+      <home-assistant-main>
+        <button id="menu">☰</button>
+        <div class="start-threshold">Start Threshold</div>
+        <div class="end-threshold">End Threshold</div>
+        <ha-drawer>
+          <ha-sidebar />
+        </ha-drawer>
+      </home-assistant-main>
+    </home-assistant>
+    <script>
+      document
+        .querySelector('home-assistant-main')
+        .addEventListener('hass-toggle-menu', ({detail: {open}}) => {
+          document.querySelector('ha-drawer').toggleAttribute('open', open)
+        })
+
+      document.addEventListener('click', () => {
+        document.querySelector('ha-drawer').toggleAttribute('open', false)
+      })
+
+      document.getElementById('menu').addEventListener('click', (event) => {
+        event.stopPropagation()
+        document.querySelector('ha-drawer').setAttribute('open', true)
+      })
+    </script>
+  </body>
+</html>
