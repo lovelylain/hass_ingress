@@ -1,0 +1,11 @@
+{
+  "domain": "ingress",
+  "name": "Home Assistant Ingress",
+  "codeowners": ["@lovelylain"],
+  "documentation": "https://github.com/lovelylain/hass_ingress",
+  "version": "0.0.1",
+  "config_flow": false,
+  "dependencies": ["http"],
+  "after_dependencies": ["panel_custom"],
+  "iot_class": "local_push"
+}
