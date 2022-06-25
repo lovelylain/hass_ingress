@@ -14,6 +14,7 @@ from aiohttp import hdrs, web, WSMsgType
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = 'ingress'
+CONF_HEADERS = 'headers'
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -21,6 +22,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(panel_iframe.CONF_ICON): cv.icon,
         vol.Optional(panel_iframe.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
         vol.Required(panel_iframe.CONF_URL): cv.string,
+        vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -35,7 +37,7 @@ async def async_setup(hass, config):
         if '://' not in url:
             url = f'http://{url}'
         token = base64.urlsafe_b64encode(os.urandom(48)).decode()
-        cfgs[token] = url
+        cfgs[token] = {'url':url, 'headers':data.get(CONF_HEADERS)}
 
         jobs.append(panel_custom.async_register_panel(hass,
             webcomponent_name = 'ingress-panel',
@@ -64,17 +66,17 @@ class IngressView(HomeAssistantView):
         self._websession = websession
 
     async def _handle(self, request, token, path):
-        url = self._config.get(token)
-        if not url:
+        cfg = self._config.get(token)
+        if not cfg:
             raise web.HTTPNotFound()
-        url = f'{url}/{path}'
+        url = f"{cfg['url']}/{path}"
 
         try:
             # Websocket
             if _is_websocket(request):
-                return await self._handle_websocket(request, url)
+                return await self._handle_websocket(request, cfg, url)
             # Request
-            return await self._handle_request(request, url)
+            return await self._handle_request(request, cfg, url)
         except aiohttp.ClientError as err:
             _LOGGER.debug('Ingress error with %s: %s', url, err)
         raise web.HTTPBadGateway() from None
@@ -86,7 +88,7 @@ class IngressView(HomeAssistantView):
     patch = _handle
     options = _handle
 
-    async def _handle_websocket(self, request, url):
+    async def _handle_websocket(self, request, cfg, url):
         if hdrs.SEC_WEBSOCKET_PROTOCOL in request.headers:
             req_protocols = [
                 str(proto.strip())
@@ -107,7 +109,7 @@ class IngressView(HomeAssistantView):
         # Start proxy
         async with self._websession.ws_connect(
             url,
-            headers=_init_header(request),
+            headers=_init_header(request, cfg),
             protocols=req_protocols,
             autoclose=False,
             autoping=False,
@@ -123,11 +125,11 @@ class IngressView(HomeAssistantView):
 
         return ws_server
 
-    async def _handle_request(self, request, url):
+    async def _handle_request(self, request, cfg, url):
         async with self._websession.request(
             request.method,
             url,
-            headers=_init_header(request),
+            headers=_init_header(request, cfg),
             params=request.query,
             allow_redirects=False,
             data=request.content,
@@ -167,7 +169,7 @@ class IngressView(HomeAssistantView):
             return response
 
 
-def _init_header(request):
+def _init_header(request, cfg):
     headers = {}
 
     # filter flags
@@ -182,6 +184,8 @@ def _init_header(request):
             hdrs.SEC_WEBSOCKET_KEY,
         ):
             continue
+        headers[name] = value
+    for name, value in cfg['headers'].items():
         headers[name] = value
 
     # Set X-Forwarded-For
