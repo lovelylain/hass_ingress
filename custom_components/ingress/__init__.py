@@ -14,7 +14,9 @@ from aiohttp import hdrs, web, WSMsgType
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = 'ingress'
+CONF_INDEX = 'index'
 CONF_HEADERS = 'headers'
+URL_BASE = '/files/ingress'
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -22,6 +24,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(panel_iframe.CONF_ICON): cv.icon,
         vol.Optional(panel_iframe.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
         vol.Required(panel_iframe.CONF_URL): cv.string,
+        vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
     })),
 }, extra=vol.ALLOW_EXTRA)
@@ -30,6 +33,8 @@ CONFIG_SCHEMA = vol.Schema({
 async def async_setup(hass, config):
     if DOMAIN not in config:
         return True
+
+    hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'))
 
     cfgs, jobs = {}, []
     for url_path, data in config[DOMAIN].items():
@@ -41,13 +46,13 @@ async def async_setup(hass, config):
 
         jobs.append(panel_custom.async_register_panel(hass,
             webcomponent_name = 'ingress-panel',
-            module_url = '/local/ingress/entrypoint.js',
+            module_url = f'{URL_BASE}/entrypoint.js',
             frontend_url_path = url_path,
             sidebar_title = data.get(panel_iframe.CONF_TITLE),
             sidebar_icon = data.get(panel_iframe.CONF_ICON),
-            require_admin = data.get(panel_iframe.CONF_REQUIRE_ADMIN),
+            require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
             embed_iframe = True,
-            config = {'token': token},
+            config = {'token':token, 'index':data[CONF_INDEX].lstrip('/')},
         ))
 
     websession = async_get_clientsession(hass)
