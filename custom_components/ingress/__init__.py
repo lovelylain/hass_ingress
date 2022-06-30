@@ -17,6 +17,7 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_HEADERS = 'headers'
 URL_BASE = '/files/ingress'
+COOKIE_NAME = 'ingress_token'
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -41,8 +42,8 @@ async def async_setup(hass, config):
         url = data[panel_iframe.CONF_URL].rstrip('/')
         if '://' not in url:
             url = f'http://{url}'
-        token = base64.urlsafe_b64encode(os.urandom(48)).decode()
-        cfgs[token] = {'url':url, 'headers':data.get(CONF_HEADERS)}
+        token = base64.urlsafe_b64encode(os.urandom(96)).decode()
+        cfgs[token] = {'name':url_path, 'url':url, 'headers':data[CONF_HEADERS]}
 
         jobs.append(panel_custom.async_register_panel(hass,
             webcomponent_name = 'ingress-panel',
@@ -72,6 +73,12 @@ class IngressView(HomeAssistantView):
 
     async def _handle(self, request, token, path):
         cfg = self._config.get(token)
+        if cfg:
+            url = f"/api/ingress/{cfg['name']}/"
+            resp = web.HTTPFound(url + path)
+            resp.set_cookie(COOKIE_NAME, token, path=url, httponly=True)
+            raise resp
+        cfg = self._config.get(request.cookies.get(COOKIE_NAME))
         if not cfg:
             raise web.HTTPNotFound()
         url = f"{cfg['url']}/{path}"
