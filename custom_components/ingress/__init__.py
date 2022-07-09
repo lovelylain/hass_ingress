@@ -17,6 +17,7 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_HEADERS = 'headers'
 CONF_PARENT = 'parent'
+CONF_INGRESS = 'ingress'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
 
@@ -29,6 +30,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
         vol.Optional(CONF_PARENT): cv.string,
+        vol.Optional(CONF_INGRESS, default=True): cv.boolean,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -41,15 +43,21 @@ async def async_setup(hass, config):
 
     cfgs, panels, subs = {}, {}, []
     for url_path, data in config[DOMAIN].items():
-        url = data[panel_iframe.CONF_URL].rstrip('/')
-        if '://' not in url:
-            url = f'http://{url}'
-        token = base64.urlsafe_b64encode(os.urandom(96)).decode()
-        cfgs[token] = {'name':url_path, 'url':url, 'headers':data[CONF_HEADERS]}
+        if data[CONF_INGRESS]:
+            url = data[panel_iframe.CONF_URL].rstrip('/')
+            if '://' not in url:
+                url = f'http://{url}'
+            token = base64.urlsafe_b64encode(os.urandom(96)).decode()
+            cfgs[token] = {'name':url_path, 'url':url, 'headers':data[CONF_HEADERS]}
+            cfg = {'token':token, 'index':data[CONF_INDEX].lstrip('/')}
+        else:
+            cfg = {'url': data[panel_iframe.CONF_URL]}
 
-        config = {'token':token, 'index':data[CONF_INDEX].lstrip('/')}
-        if data.get(CONF_PARENT):
-            subs.append((url_path, data[CONF_PARENT], config))
+        parent = data.get(CONF_PARENT)
+        if parent:
+            if url_path.startswith(parent) and url_path[len(parent):len(parent)+1] in '-_':
+                url_path = url_path[len(parent)+1:]
+            subs.append((url_path, parent, cfg))
             continue
 
         panels[url_path] = dict(
@@ -60,14 +68,14 @@ async def async_setup(hass, config):
             sidebar_icon = data.get(panel_iframe.CONF_ICON),
             require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
             embed_iframe = True,
-            config = config,
+            config = cfg,
         )
 
-    for sub, parent, config in subs:
+    for sub, parent, cfg in subs:
         if parent not in panels:
             _LOGGER.error('parent panel[%s] not found, sub panel[%s] will not work!', parent, sub)
             continue
-        panels[parent]['config'].setdefault('sub', {})[sub] = config
+        panels[parent]['config'].setdefault('sub', {})[sub] = cfg
 
     websession = async_get_clientsession(hass)
     hass.http.register_view(IngressView(cfgs, websession))
