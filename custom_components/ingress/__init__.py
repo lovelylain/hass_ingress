@@ -16,6 +16,7 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_HEADERS = 'headers'
+CONF_PARENT = 'parent'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
 
@@ -27,6 +28,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Required(panel_iframe.CONF_URL): cv.string,
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
+        vol.Optional(CONF_PARENT): cv.string,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -35,9 +37,9 @@ async def async_setup(hass, config):
     if DOMAIN not in config:
         return True
 
-    hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'))
+    hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
 
-    cfgs, jobs = {}, []
+    cfgs, panels, subs = {}, {}, []
     for url_path, data in config[DOMAIN].items():
         url = data[panel_iframe.CONF_URL].rstrip('/')
         if '://' not in url:
@@ -45,7 +47,12 @@ async def async_setup(hass, config):
         token = base64.urlsafe_b64encode(os.urandom(96)).decode()
         cfgs[token] = {'name':url_path, 'url':url, 'headers':data[CONF_HEADERS]}
 
-        jobs.append(panel_custom.async_register_panel(hass,
+        config = {'token':token, 'index':data[CONF_INDEX].lstrip('/')}
+        if data.get(CONF_PARENT):
+            subs.append((url_path, data[CONF_PARENT], config))
+            continue
+
+        panels[url_path] = dict(
             webcomponent_name = 'ingress-panel',
             module_url = f'{URL_BASE}/entrypoint.js',
             frontend_url_path = url_path,
@@ -53,12 +60,18 @@ async def async_setup(hass, config):
             sidebar_icon = data.get(panel_iframe.CONF_ICON),
             require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
             embed_iframe = True,
-            config = {'token':token, 'index':data[CONF_INDEX].lstrip('/')},
-        ))
+            config = config,
+        )
+
+    for sub, parent, config in subs:
+        if parent not in panels:
+            _LOGGER.error('parent panel[%s] not found, sub panel[%s] will not work!', parent, sub)
+            continue
+        panels[parent]['config'].setdefault('sub', {})[sub] = config
 
     websession = async_get_clientsession(hass)
     hass.http.register_view(IngressView(cfgs, websession))
-    await asyncio.gather(*jobs)
+    await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
     return True
 
 
