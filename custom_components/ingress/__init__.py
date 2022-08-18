@@ -18,6 +18,7 @@ CONF_INDEX = 'index'
 CONF_HEADERS = 'headers'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
+API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
 
@@ -85,7 +86,7 @@ async def async_setup(hass, config):
 
 class IngressView(HomeAssistantView):
     name = 'api:ingress:proxy'
-    url = '/api/ingress/{token}/{path:.*}'
+    url = API_BASE + '/{token}/{path:.*}'
     requires_auth = False
 
     def __init__(self, config, websession):
@@ -95,7 +96,7 @@ class IngressView(HomeAssistantView):
     async def _handle(self, request, token, path):
         cfg = self._config.get(token)
         if cfg:
-            url = f"/api/ingress/{cfg['name']}/"
+            url = f"{API_BASE}/{cfg['name']}/"
             resp = web.HTTPFound(url + path)
             resp.set_cookie(COOKIE_NAME, token, path=url, httponly=True)
             raise resp
@@ -220,6 +221,9 @@ def _init_header(request, cfg):
         headers[name] = value
     for name, value in cfg['headers'].items():
         headers[name] = value
+
+    # Set X-Ingress-Path
+    headers['X-Ingress-Path'] = f"{API_BASE}/{cfg['name']}"
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)
