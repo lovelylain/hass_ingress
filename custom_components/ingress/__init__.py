@@ -97,6 +97,8 @@ class IngressView(HomeAssistantView):
         cfg = self._config.get(token)
         if cfg:
             url = f"{API_BASE}/{cfg['name']}/"
+            if request.query_string:
+                path = f'{path}?{request.query_string}'
             resp = web.HTTPFound(url + path)
             resp.set_cookie(COOKIE_NAME, token, path=url, httponly=True)
             raise resp
