@@ -2,6 +2,7 @@ import asyncio
 import base64
 from ipaddress import ip_address
 import os
+import time
 import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
@@ -21,6 +22,7 @@ CONF_INGRESS = 'ingress'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
+EXPIRE_TIME = 86400
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -36,35 +38,57 @@ CONFIG_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 
+def new_token(cfgs, cfg):
+    while True:
+        token = base64.urlsafe_b64encode(os.urandom(96)).decode()
+        if token not in cfgs:
+            break
+    tkcfg = cfg['panel'].setdefault('token', {})
+    cfgs.pop(tkcfg.get('value'), None)
+    cfgs[token] = cfg
+    tkcfg['value'] = token
+    tkcfg['expire'] = time.time() + EXPIRE_TIME
+    return token
+
+def get_cfg_by_token(cfgs, token):
+    cfg = cfgs.get(token)
+    if cfg:
+        now = time.time()
+        tkcfg = cfg['panel']['token']
+        if now < tkcfg['expire']:
+            tkcfg['expire'] = now + EXPIRE_TIME
+        else:
+            token = new_token(cfgs, cfg)
+    return token, cfg
+
 async def async_setup(hass, config):
     if DOMAIN not in config:
         return True
 
     hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
 
-    cfgs, panels, subs = {}, {}, []
-    for url_path, data in config[DOMAIN].items():
+    cfgs, panels, children = {}, {}, []
+    for name, data in config[DOMAIN].items():
         if data[CONF_INGRESS]:
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
-            token = base64.urlsafe_b64encode(os.urandom(96)).decode()
-            cfgs[token] = {'name':url_path, 'url':url, 'headers':data[CONF_HEADERS]}
-            cfg = {'token':token, 'index':data[CONF_INDEX].lstrip('/')}
+            cfg = {'index': data[CONF_INDEX].lstrip('/')}
+            new_token(cfgs, {'panel':cfg, 'name':name, 'url':url, 'headers':data[CONF_HEADERS]})
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
 
         parent = data.get(CONF_PARENT)
         if parent:
-            if url_path.startswith(parent) and url_path[len(parent):len(parent)+1] in '-_':
-                url_path = url_path[len(parent)+1:]
-            subs.append((url_path, parent, cfg))
+            if name.startswith(parent) and name[len(parent):len(parent)+1] in '-_':
+                name = name[len(parent)+1:]
+            children.append((name, parent, cfg))
             continue
 
-        panels[url_path] = dict(
+        panels[name] = dict(
             webcomponent_name = 'ingress-panel',
             module_url = f'{URL_BASE}/entrypoint.js',
-            frontend_url_path = url_path,
+            frontend_url_path = name,
             sidebar_title = data.get(panel_iframe.CONF_TITLE),
             sidebar_icon = data.get(panel_iframe.CONF_ICON),
             require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
@@ -72,11 +96,11 @@ async def async_setup(hass, config):
             config = cfg,
         )
 
-    for sub, parent, cfg in subs:
+    for child, parent, cfg in children:
         if parent not in panels:
-            _LOGGER.error('parent panel[%s] not found, sub panel[%s] will not work!', parent, sub)
+            _LOGGER.error('parent panel[%s] not found, skip child panel[%s]!', parent, child)
             continue
-        panels[parent]['config'].setdefault('sub', {})[sub] = cfg
+        panels[parent]['config'].setdefault('children', {})[child] = cfg
 
     websession = async_get_clientsession(hass)
     hass.http.register_view(IngressView(cfgs, websession))
@@ -94,7 +118,7 @@ class IngressView(HomeAssistantView):
         self._websession = websession
 
     async def _handle(self, request, token, path):
-        cfg = self._config.get(token)
+        token, cfg = get_cfg_by_token(self._config, token)
         if cfg:
             url = f"{API_BASE}/{cfg['name']}/"
             if request.query_string:
