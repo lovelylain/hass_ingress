@@ -7,6 +7,7 @@ import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components import panel_custom, panel_iframe
+from homeassistant.components.frontend import EVENT_PANELS_UPDATED
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
@@ -22,7 +23,7 @@ CONF_INGRESS = 'ingress'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
-EXPIRE_TIME = 86400
+EXPIRE_TIME = 3600
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -38,27 +39,26 @@ CONFIG_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 
-def new_token(cfgs, cfg):
+def new_token(now, cfgs, cfg):
     while True:
         token = base64.urlsafe_b64encode(os.urandom(96)).decode()
         if token not in cfgs:
             break
-    tkcfg = cfg['panel'].setdefault('token', {})
+    tkcfg = cfg.setdefault('token', {})
     cfgs.pop(tkcfg.get('value'), None)
     cfgs[token] = cfg
     tkcfg['value'] = token
-    tkcfg['expire'] = time.time() + EXPIRE_TIME
-    return token
+    tkcfg['expire'] = now + EXPIRE_TIME
+    return tkcfg
 
-def get_cfg_by_token(cfgs, token):
+def get_cfg_by_token(hass, cfgs, token):
     cfg = cfgs.get(token)
     if cfg:
-        now = time.time()
-        tkcfg = cfg['panel']['token']
-        if now < tkcfg['expire']:
-            tkcfg['expire'] = now + EXPIRE_TIME
-        else:
-            token = new_token(cfgs, cfg)
+        now = int(time.time())
+        tkcfg = cfg['token']
+        if now >= tkcfg['expire']:
+            token = new_token(now, cfgs, cfg)['value']
+            hass.bus.async_fire(EVENT_PANELS_UPDATED)
     return token, cfg
 
 async def async_setup(hass, config):
@@ -67,14 +67,15 @@ async def async_setup(hass, config):
 
     hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
 
+    now = int(time.time())
     cfgs, panels, children = {}, {}, []
     for name, data in config[DOMAIN].items():
         if data[CONF_INGRESS]:
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
-            cfg = {'index': data[CONF_INDEX].lstrip('/')}
-            new_token(cfgs, {'panel':cfg, 'name':name, 'url':url, 'headers':data[CONF_HEADERS]})
+            token = new_token(now, cfgs, {'name':name, 'url':url, 'headers':data[CONF_HEADERS]})
+            cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
 
@@ -103,7 +104,7 @@ async def async_setup(hass, config):
         panels[parent]['config'].setdefault('children', {})[child] = cfg
 
     websession = async_get_clientsession(hass)
-    hass.http.register_view(IngressView(cfgs, websession))
+    hass.http.register_view(IngressView(hass, cfgs, websession))
     await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
     return True
 
@@ -113,12 +114,13 @@ class IngressView(HomeAssistantView):
     url = API_BASE + '/{token}/{path:.*}'
     requires_auth = False
 
-    def __init__(self, config, websession):
+    def __init__(self, hass, config, websession):
+        self._hass = hass
         self._config = config
         self._websession = websession
 
     async def _handle(self, request, token, path):
-        token, cfg = get_cfg_by_token(self._config, token)
+        token, cfg = get_cfg_by_token(self._hass, self._config, token)
         if cfg:
             url = f"{API_BASE}/{cfg['name']}/"
             if request.query_string:
