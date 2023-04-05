@@ -6,7 +6,8 @@ import time
 import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
-from homeassistant.components import panel_custom, panel_iframe
+from homeassistant.const import CONF_HEADERS
+from homeassistant.components import panel_custom, panel_iframe, frontend
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -17,7 +18,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = 'ingress'
 CONF_INDEX = 'index'
-CONF_HEADERS = 'headers'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
 API_BASE = '/api/ingress'
@@ -61,15 +61,21 @@ def get_cfg_by_token(hass, cfgs, token):
             hass.bus.async_fire(EVENT_PANELS_UPDATED)
     return token, cfg
 
+async def _async_setup_reload_service(hass, domain, async_reset, async_setup):
+    from homeassistant.const import SERVICE_RELOAD
+    from homeassistant.helpers.reload import async_integration_yaml_config
+    from homeassistant.helpers.service import async_register_admin_service
+    async def reload_config(call):
+        config = await async_integration_yaml_config(hass, domain)
+        await async_reset(hass)
+        await async_setup(hass, config)
+        hass.bus.async_fire(f'event_{domain}_reloaded', context=call.context)
+    async_register_admin_service(hass, domain, SERVICE_RELOAD, reload_config)
+
 async def async_setup(hass, config):
-    if DOMAIN not in config:
-        return True
-
-    hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
-
     now = int(time.time())
     cfgs, panels, children = {}, {}, []
-    for name, data in config[DOMAIN].items():
+    for name, data in config.get(DOMAIN, {}).items():
         if data[CONF_INGRESS]:
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
@@ -103,9 +109,24 @@ async def async_setup(hass, config):
             continue
         panels[parent]['config'].setdefault('children', {})[child] = cfg
 
-    websession = async_get_clientsession(hass)
-    hass.http.register_view(IngressView(hass, cfgs, websession))
     await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
+
+    data = hass.data.setdefault(DOMAIN, {})
+    if 'config' in data:
+        data['config'].update(cfgs)
+        data['panels'].update(panels)
+    else:
+        hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
+        hass.http.register_view(IngressView(hass, cfgs, async_get_clientsession(hass)))
+        data.update(config=cfgs, panels=set(panels))
+
+        async def async_reset(hass):
+            data = hass.data[DOMAIN]
+            for name in data['panels']:
+                frontend.async_remove_panel(hass, name)
+            data['panels'].clear()
+            data['config'].clear()
+        await _async_setup_reload_service(hass, DOMAIN, async_reset, async_setup)
     return True
 
 

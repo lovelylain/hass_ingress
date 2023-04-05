@@ -1,6 +1,6 @@
 {
   "domain": "ingress",
-  "name": "Home Assistant Ingress",
+  "name": "Ingress",
   "codeowners": ["@lovelylain"],
   "documentation": "https://github.com/lovelylain/hass_ingress",
   "version": "0.0.1",

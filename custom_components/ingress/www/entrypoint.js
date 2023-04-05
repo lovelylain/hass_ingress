@@ -2,8 +2,8 @@ class IngressPanel extends HTMLElement {
   set panel(panel) {
     let config = panel.config
     if (config.children) {
-      const page = window.location.pathname.split('/').pop()
-      if (config.children.hasOwnProperty(page)) {
+      const page = window.location.pathname.split('/')[2]
+      if (page && config.children.hasOwnProperty(page)) {
         config = config.children[page]
       }
     }
