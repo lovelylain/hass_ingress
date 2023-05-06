@@ -20,6 +20,7 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
+CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 COOKIE_NAME = 'ingress_token'
@@ -35,6 +36,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
+        vol.Optional(CONF_DISABLE_CHUNKED, default=False): cv.boolean,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -80,7 +82,12 @@ async def async_setup(hass, config):
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
-            token = new_token(now, cfgs, {'name':name, 'url':url, 'headers':data[CONF_HEADERS]})
+            token = new_token(now, cfgs, {
+                'name': name,
+                'url': url,
+                'headers': data[CONF_HEADERS],
+                'disable_chunked': data[CONF_DISABLE_CHUNKED],
+            })
             cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
@@ -215,7 +222,7 @@ class IngressView(HomeAssistantView):
             headers=_init_header(request, cfg),
             params=request.query,
             allow_redirects=False,
-            data=request.content,
+            data=await request.content.read() if cfg['disable_chunked'] else request.content,
             timeout=aiohttp.ClientTimeout(total=None),
         ) as result:
             headers = _response_header(result)
