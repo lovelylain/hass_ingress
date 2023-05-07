@@ -20,11 +20,11 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
+CONF_COOKIE_NAME = 'cookie_name'
+CONF_EXPIRE_TIME = 'expire_time'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
-COOKIE_NAME = 'ingress_token'
-EXPIRE_TIME = 3600
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -33,34 +33,50 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(panel_iframe.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
         vol.Required(panel_iframe.CONF_URL): cv.string,
         vol.Optional(CONF_INDEX, default=''): cv.string,
-        vol.Optional(CONF_HEADERS, default={}): vol.Schema({str: cv.string}),
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
-        vol.Optional(CONF_DISABLE_CHUNKED, default=False): cv.boolean,
+        vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
+        vol.Optional(CONF_COOKIE_NAME): cv.string,
+        vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
+        vol.Optional(CONF_DISABLE_CHUNKED): cv.boolean,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
+class IngressCfg:
+    headers = {}
+    cookie_name = 'ingress_token'
+    cookie_names = {}
+    expire_time = 3600
+    disable_chunked = False
 
-def new_token(now, cfgs, cfg):
+    def __init__(self, **kwargs):
+        self.__dict__.update((k,v) for k,v in kwargs.items() if v)
+        if self.cookie_name != IngressCfg.cookie_name:
+            IngressCfg.cookie_names[self.name] = self.cookie_name
+        self.token = {}
+
+def new_token(now, cfgs, cfg: IngressCfg):
     while True:
         token = base64.urlsafe_b64encode(os.urandom(96)).decode()
         if token not in cfgs:
             break
-    tkcfg = cfg.setdefault('token', {})
+    tkcfg = cfg.token
     cfgs.pop(tkcfg.get('value'), None)
     cfgs[token] = cfg
     tkcfg['value'] = token
-    tkcfg['expire'] = now + EXPIRE_TIME
+    tkcfg['expire'] = now + cfg.expire_time
     return tkcfg
 
 def get_cfg_by_token(hass, cfgs, token):
     cfg = cfgs.get(token)
     if cfg:
         now = int(time.time())
-        tkcfg = cfg['token']
+        tkcfg = cfg.token
         if now >= tkcfg['expire']:
             token = new_token(now, cfgs, cfg)['value']
             hass.bus.async_fire(EVENT_PANELS_UPDATED)
+    else:
+        token = IngressCfg.cookie_names.get(token, IngressCfg.cookie_name)
     return token, cfg
 
 async def _async_setup_reload_service(hass, domain, async_reset, async_setup):
@@ -82,12 +98,13 @@ async def async_setup(hass, config):
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
-            token = new_token(now, cfgs, {
-                'name': name,
-                'url': url,
-                'headers': data[CONF_HEADERS],
-                'disable_chunked': data[CONF_DISABLE_CHUNKED],
-            })
+            token = new_token(now, cfgs, IngressCfg(
+                name=name, url=url,
+                headers=data.get(CONF_HEADERS),
+                cookie_name=data.get(CONF_COOKIE_NAME),
+                expire_time=data.get(CONF_EXPIRE_TIME),
+                disable_chunked=data.get(CONF_DISABLE_CHUNKED),
+            ))
             cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
@@ -133,6 +150,7 @@ async def async_setup(hass, config):
                 frontend.async_remove_panel(hass, name)
             data['panels'].clear()
             data['config'].clear()
+            IngressCfg.cookie_names.clear()
         await _async_setup_reload_service(hass, DOMAIN, async_reset, async_setup)
     return True
 
@@ -150,16 +168,16 @@ class IngressView(HomeAssistantView):
     async def _handle(self, request, token, path):
         token, cfg = get_cfg_by_token(self._hass, self._config, token)
         if cfg:
-            url = f"{API_BASE}/{cfg['name']}/"
+            url = f'{API_BASE}/{cfg.name}/'
             if request.query_string:
                 path = f'{path}?{request.query_string}'
             resp = web.HTTPFound(url + path)
-            resp.set_cookie(COOKIE_NAME, token, path=url, httponly=True)
+            resp.set_cookie(cfg.cookie_name, token, path=url, httponly=True)
             raise resp
-        cfg = self._config.get(request.cookies.get(COOKIE_NAME))
+        cfg = self._config.get(request.cookies.get(token))
         if not cfg:
             raise web.HTTPNotFound()
-        url = f"{cfg['url']}/{path}"
+        url = f'{cfg.url}/{path}'
 
         try:
             # Websocket
@@ -222,7 +240,7 @@ class IngressView(HomeAssistantView):
             headers=_init_header(request, cfg),
             params=request.query,
             allow_redirects=False,
-            data=await request.content.read() if cfg['disable_chunked'] else request.content,
+            data=await request.content.read() if cfg.disable_chunked else request.content,
             timeout=aiohttp.ClientTimeout(total=None),
         ) as result:
             headers = _response_header(result)
@@ -274,12 +292,15 @@ def _init_header(request, cfg):
             hdrs.SEC_WEBSOCKET_KEY,
         ):
             continue
+        if name == hdrs.COOKIE:
+            value = '; '.join(f'{k}={v}' for k,v in request.cookies.items() if k != cfg.cookie_name)
+            if not value: continue
         headers[name] = value
-    for name, value in cfg['headers'].items():
+    for name, value in cfg.headers.items():
         headers[name] = value
 
     # Set X-Ingress-Path
-    headers['X-Ingress-Path'] = f"{API_BASE}/{cfg['name']}"
+    headers['X-Ingress-Path'] = f'{API_BASE}/{cfg.name}'
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)
