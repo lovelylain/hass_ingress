@@ -20,6 +20,7 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
+CONF_TOOLBAR = 'toolbar'
 CONF_COOKIE_NAME = 'cookie_name'
 CONF_EXPIRE_TIME = 'expire_time'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
@@ -35,6 +36,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
+        vol.Optional(CONF_TOOLBAR): cv.boolean,
         vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
         vol.Optional(CONF_COOKIE_NAME): cv.string,
         vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
@@ -109,21 +111,24 @@ async def async_setup(hass, config):
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
 
+        if data.get(CONF_TOOLBAR): cfg['toolbar'] = True
+        title = data.get(panel_iframe.CONF_TITLE)
         parent = data.get(CONF_PARENT)
         if parent:
             if name.startswith(parent) and name[len(parent):len(parent)+1] in '-_':
                 name = name[len(parent)+1:]
+            if title: cfg['title'] = title
             children.append((name, parent, cfg))
             continue
 
         panels[name] = dict(
-            webcomponent_name = 'ingress-panel',
-            module_url = f'{URL_BASE}/entrypoint.js',
+            webcomponent_name = 'ha-panel-ingress',
+            js_url = f'{URL_BASE}/entrypoint.js',
             frontend_url_path = name,
-            sidebar_title = data.get(panel_iframe.CONF_TITLE),
+            sidebar_title = title,
             sidebar_icon = data.get(panel_iframe.CONF_ICON),
             require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
-            embed_iframe = True,
+            embed_iframe = False,
             config = cfg,
         )
 

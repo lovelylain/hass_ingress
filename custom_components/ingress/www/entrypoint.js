@@ -1,17 +1,71 @@
-class IngressPanel extends HTMLElement {
-  set panel(panel) {
-    let config = panel.config
+class HaPanelIngress extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({mode: 'open'});
+  }
+
+  setProperties(props) {
+    if (this._setProperties) {
+      this._setProperties(props);
+    }
+    if (!props.panel) {
+      return;
+    }
+
+    let {config, title} = props.panel;
     if (config.children) {
-      const page = window.location.pathname.split('/')[2]
+      const page = window.location.pathname.split('/')[2];
       if (page && config.children.hasOwnProperty(page)) {
-        config = config.children[page]
+        config = config.children[page];
+        title = config.title;
       }
     }
-    if (config.url) {
-      window.location.href = config.url
-    } else {
-      window.location.href = `/api/ingress/${config.token.value}/${config.index}`
+
+    let html = `
+<iframe ${title ? `title="${title}"` : ''}
+src="${config.url || `/api/ingress/${config.token.value}/${config.index}`}"
+allow="fullscreen"
+></iframe>
+`;
+    html = `
+<style>
+  iframe {
+    border: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    background-color: var(--primary-background-color);
+  }
+</style>
+${config.toolbar ? `<hass-subpage main-page>${html}</hass-subpage>` : html}
+`;
+
+    let func = (elem) => { elem.shadowRoot.innerHTML = html; };
+    if (config.toolbar) {
+      const then = func;
+      func = (elem) => {
+        then(elem);
+        const subpage = elem.shadowRoot.querySelector('hass-subpage');
+        subpage.header = title;
+        elem._setProperties = (props) => {
+          for (const k of ['hass', 'narrow']) {
+            if (props.hasOwnProperty(k)) {
+              subpage[k] = props[k];
+            }
+          }
+        };
+        elem._setProperties(props);
+      };
+      if (!customElements.get('ha-panel-iframe')) {
+        const then = func;
+        func = (elem) => {
+          const panels = [{url_path: 'tmp', component_name: 'iframe'}];
+          const ppr = document.createElement('partial-panel-resolver');
+          ppr.getRoutes(panels).routes.tmp.load().then(() => { then(elem); });
+        };
+      }
     }
+    func(this);
   }
 }
-customElements.define("ingress-panel", IngressPanel)
+customElements.define('ha-panel-ingress', HaPanelIngress)
