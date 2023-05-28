@@ -230,8 +230,8 @@ class IngressView(HomeAssistantView):
             # Proxy requests
             await asyncio.wait(
                 [
-                    _websocket_forward(ws_server, ws_client),
-                    _websocket_forward(ws_client, ws_server),
+                    asyncio.create_task(_websocket_forward(ws_server, ws_client)),
+                    asyncio.create_task(_websocket_forward(ws_client, ws_server)),
                 ],
                 return_when=asyncio.FIRST_COMPLETED,
             )
@@ -239,14 +239,19 @@ class IngressView(HomeAssistantView):
         return ws_server
 
     async def _handle_request(self, request, cfg, url):
+        data = request.content
+        if (request.headers.get(hdrs.TRANSFER_ENCODING) != 'chunked' and
+            (cfg.disable_chunked or int(request.headers.get(hdrs.CONTENT_LENGTH, 0)) < 4194000)):
+            data = await data.read()
         async with self._websession.request(
             request.method,
             url,
             headers=_init_header(request, cfg),
             params=request.query,
             allow_redirects=False,
-            data=await request.content.read() if cfg.disable_chunked else request.content,
+            data=data,
             timeout=aiohttp.ClientTimeout(total=None),
+            skip_auto_headers=[hdrs.CONTENT_TYPE],
         ) as result:
             headers = _response_header(result)
 
