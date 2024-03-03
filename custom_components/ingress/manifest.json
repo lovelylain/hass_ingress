@@ -1,11 +1,12 @@
 {
   "domain": "ingress",
   "name": "Ingress",
+  "after_dependencies": ["panel_custom","panel_iframe"],
   "codeowners": ["@lovelylain"],
-  "documentation": "https://github.com/lovelylain/hass_ingress",
-  "version": "0.0.1",
   "config_flow": false,
   "dependencies": ["http"],
-  "after_dependencies": ["panel_custom"],
-  "iot_class": "local_push"
+  "documentation": "https://github.com/lovelylain/hass_ingress",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/lovelylain/hass_ingress/issues",
+  "version": "0.0.1"
 }
