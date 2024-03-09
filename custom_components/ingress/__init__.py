@@ -59,7 +59,7 @@ class IngressCfg:
 
 def new_token(now, cfgs, cfg: IngressCfg):
     while True:
-        token = base64.urlsafe_b64encode(os.urandom(96)).decode()
+        token = base64.urlsafe_b64encode(os.urandom(33)).decode()
         if token not in cfgs:
             break
     tkcfg = cfg.token
