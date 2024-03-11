@@ -21,11 +21,14 @@ CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
 CONF_TOOLBAR = 'toolbar'
+CONF_UI_MODE = 'ui_mode'
 CONF_COOKIE_NAME = 'cookie_name'
 CONF_EXPIRE_TIME = 'expire_time'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
+
+UI_MODES = ['replace', 'normal', 'toolbar']
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -37,6 +40,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
         vol.Optional(CONF_TOOLBAR): cv.boolean,
+        vol.Optional(CONF_UI_MODE): vol.In(UI_MODES),
         vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
         vol.Optional(CONF_COOKIE_NAME): cv.string,
         vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
@@ -111,7 +115,10 @@ async def async_setup(hass, config):
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
 
-        if data.get(CONF_TOOLBAR): cfg['toolbar'] = True
+        ui_mode = data.get(CONF_UI_MODE)
+        if ui_mode is None:
+            ui_mode = 'toolbar' if data.get(CONF_TOOLBAR) else 'normal'
+        cfg['ui_mode'] = ui_mode
         title = data.get(panel_iframe.CONF_TITLE)
         parent = data.get(CONF_PARENT)
         if parent:

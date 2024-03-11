@@ -21,11 +21,15 @@ class HaPanelIngress extends HTMLElement {
       }
     }
 
+    const targetUrl = config.url || `/api/ingress/${config.token.value}/${config.index}`;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (config.ui_mode === 'replace' || urlParams.get('replace') === '1') {
+      window.location.href = targetUrl;
+    }
+    const showToolbar = config.ui_mode === 'toolbar';
+
     let html = `
-<iframe ${title ? `title="${title}"` : ''}
-src="${config.url || `/api/ingress/${config.token.value}/${config.index}`}"
-allow="fullscreen"
-></iframe>
+<iframe ${title ? `title="${title}"` : ''} src="${targetUrl}" allow="fullscreen"></iframe>
 `;
     html = `
 <style>
@@ -37,11 +41,11 @@ allow="fullscreen"
     background-color: var(--primary-background-color);
   }
 </style>
-${config.toolbar ? `<hass-subpage main-page>${html}</hass-subpage>` : html}
+${showToolbar ? `<hass-subpage main-page>${html}</hass-subpage>` : html}
 `;
 
     let func = (elem) => { elem.shadowRoot.innerHTML = html; };
-    if (config.toolbar) {
+    if (showToolbar) {
       const then = func;
       func = (elem) => {
         then(elem);
