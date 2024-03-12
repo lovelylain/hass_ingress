@@ -122,7 +122,7 @@ async def async_setup(hass, config):
         title = data.get(panel_iframe.CONF_TITLE)
         parent = data.get(CONF_PARENT)
         if parent:
-            if name.startswith(parent) and name[len(parent):len(parent)+1] in '-_':
+            if name.startswith(parent) and name[len(parent):len(parent)+1] == '_':
                 name = name[len(parent)+1:]
             if title: cfg['title'] = title
             children.append((name, parent, cfg))

@@ -15,7 +15,8 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Show header on ingress panel pages. (option: `ui_mode: toolbar`)
 - Hide panels from sidebar. (option: `parent: parent_panel`)
 - Additional http headers passed to the backend service, such as `authorization` and `host`, so that we can access the external resources without extra login.  (option: `ingress: true` `header: {map}`)
-- Embed in other pages. (url param: `replace=1`)
+- Embed in other pages. (url param: `?replace`)
+- Reload Ingress configuration without restarting HA.
 
 ## Install
 
@@ -27,13 +28,14 @@ To enable Ingress panels in your installation, add the following to your `config
 
 ```yaml
 ingress:
-  mdiindex:
+  link_automation:
     ingress: false
-    title: MDI Index
-    icon: mdi:vector-square
-    url: /local/home-assistant-mdi/home-assistant-mdi.html
+    ui_mode: replace
+    title: Automation
+    icon: mdi:link
+    url: /config/automation/dashboard
   frigate:
-    toolbar: true
+    ui_mode: toolbar
     title: Frigate
     icon: mdi:cctv
     url: http://172.30.32.2:5000

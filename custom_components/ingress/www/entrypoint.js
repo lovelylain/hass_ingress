@@ -23,7 +23,9 @@ class HaPanelIngress extends HTMLElement {
 
     const targetUrl = config.url || `/api/ingress/${config.token.value}/${config.index}`;
     const urlParams = new URLSearchParams(window.location.search);
-    if (config.ui_mode === 'replace' || urlParams.get('replace') === '1') {
+    if (urlParams.has('replace')) {
+      window.location.href = targetUrl;
+    } else if (config.ui_mode === 'replace') {
       if (targetUrl.indexOf('://') !== -1) {
         window.location.href = targetUrl;
       }
