@@ -6,6 +6,17 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 
 ![overview](images/overview.png)
 
+## Features
+
+- Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/). (option: `ingress: true`)
+- Sidebar function similar to [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/). (option: `ingress: false`)
+- Add any HA page as a sidebar panel. (option: `ui_mode: replace`)
+- Hide header on ingress panel pages. (option: `ui_mode: normal`)
+- Show header on ingress panel pages. (option: `ui_mode: toolbar`)
+- Hide panels from sidebar. (option: `parent: parent_panel`)
+- Additional http headers passed to the backend service, such as `authorization` and `host`, so that we can access the external resources without extra login.  (option: `ingress: true` `header: {map}`)
+- Embed in other pages. (url param: `replace=1`)
+
 ## Install
 
 You can install this custom component by adding this repository (https://github.com/lovelylain/hass_ingress) to HACS in the settings menu of HACS first. You will find the custom component in the integration menu afterwards, look for `Ingress`. Alternatively, you can install it manually by copying the custom_component folder to your Home Assistant configuration folder.
@@ -55,7 +66,10 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **icon**: [icon](https://www.home-assistant.io/docs/configuration/customizing-devices/#icon) (optional) Icon for entry.
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
     - **ingress**: boolean (optional, default: true) [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/) mode if false else ingress mode.
-    - **toolbar**: boolean (optional, default: false) Enable toolbar if true. It is recommended to enable toolbar on HA versions higher than 2023.3.6.
+    - **ui_mode**: string (oneof `replace` `normal` `toolbar`, default: normal)
+      - replace: Redirect to the target url, useful when adding an HA page as a sidebar panel.
+      - normal: No header on ingress panel pages.
+      - toolbar: Show header on ingress panel pages. It is recommended to use toolbar instead of normal on HA versions higher than [2023.3.6](https://github.com/home-assistant/android/issues/3460).
     - **url**: string (REQUIRED) The absolute URL or relative URL with an absolute path to open.
     - **index**: string (optional, default empty) The relative URL of index page. If the `url` is http://127.0.0.1:45180/ui/, all access must be under the /ui/ path; if the `url` is http://127.0.0.1:45180 and the `index` is /ui/, all paths of http://127.0.0.1:45180 can be accessed.
     - **parent**: string (optional, default empty) Parent ingress panel name. If non-empty, this panel will be hidden from the HA sidebar and you can access it via the `/{parent panel_name}/{child panel_name}` link. For example, the parent panel `nodered`, the sub-panel `ui` or `nodered_ui`, you can access the sub-panel through `/nodered/ui`.

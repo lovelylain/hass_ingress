@@ -24,7 +24,10 @@ class HaPanelIngress extends HTMLElement {
     const targetUrl = config.url || `/api/ingress/${config.token.value}/${config.index}`;
     const urlParams = new URLSearchParams(window.location.search);
     if (config.ui_mode === 'replace' || urlParams.get('replace') === '1') {
-      window.location.href = targetUrl;
+      if (targetUrl.indexOf('://') !== -1) {
+        window.location.href = targetUrl;
+      }
+      document.createElement('ha-panel-custom').navigate(targetUrl, {replace: true});
     }
     const showToolbar = config.ui_mode === 'toolbar';
 
