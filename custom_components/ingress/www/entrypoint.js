@@ -21,8 +21,19 @@ class HaPanelIngress extends HTMLElement {
       }
     }
 
-    const targetUrl = config.url || `/api/ingress/${config.token.value}/${config.index}`;
+    let {url:targetUrl, index} = config;
     const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('index')) {
+      const path = urlParams.get('index').replace(/^\/+/, '');
+      if (!/(^|\/)\.\.\//.test(path) && (config.token || path)) {
+        index = path;
+      }
+    }
+    if (config.token) {
+      targetUrl = `/api/ingress/${config.token.value}/${index}`;
+    } else if (index) {
+      targetUrl = `${targetUrl}/${index}`;
+    }
     if (urlParams.has('replace')) {
       window.location.href = targetUrl;
     } else if (config.ui_mode === 'replace') {

@@ -13,9 +13,10 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Add any HA page as a sidebar panel. (option: `ui_mode: replace`)
 - Hide header on ingress panel pages. (option: `ui_mode: normal`)
 - Show header on ingress panel pages. (option: `ui_mode: toolbar`)
-- Hide panels from sidebar. (option: `parent: parent_panel`)
+- Hide ingress panels from sidebar. (option: `parent: parent_panel`)
 - Additional http headers passed to the backend service, such as `authorization` and `host`, so that we can access the external resources without extra login.  (option: `ingress: true` `header: {map}`)
-- Embed in other pages. (url param: `?replace`)
+- Embed in other pages. (url: `/api/ingress/{name}/`)
+- Passing url parameters. (url: `/{panel}?index={overwrite_index}`)
 - Reload Ingress configuration without restarting HA.
 
 ## Install
