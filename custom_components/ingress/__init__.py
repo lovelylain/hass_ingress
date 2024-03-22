@@ -117,10 +117,12 @@ async def async_setup(hass, config):
                 disable_chunked=data.get(CONF_DISABLE_CHUNKED),
             )
             token = new_token(now, cfgs, ingress_cfg)
-            cfg = {'token': token}
+            cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
-        cfg['index'] = data[CONF_INDEX].lstrip('/')
+            if data[CONF_INDEX]:
+                cfg['url'] = cfg['url'].rstrip('/')
+                cfg['index'] = data[CONF_INDEX].lstrip('/')
 
         ui_mode = data.get(CONF_UI_MODE)
         if ui_mode is None:
