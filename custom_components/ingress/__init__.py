@@ -13,7 +13,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
 from aiohttp import hdrs, web, WSMsgType
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qs
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +21,7 @@ DOMAIN = 'ingress'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
+CONF_WORK_MODE = 'work_mode'
 CONF_TOOLBAR = 'toolbar'
 CONF_UI_MODE = 'ui_mode'
 CONF_COOKIE_NAME = 'cookie_name'
@@ -29,7 +30,8 @@ CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
-UI_MODES = ['replace', 'normal', 'toolbar']
+WORK_MODES = ['ingress', 'iframe', 'auth']
+UI_MODES = ['normal', 'toolbar', 'replace']
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -40,6 +42,7 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
+        vol.Optional(CONF_WORK_MODE): vol.In(WORK_MODES),
         vol.Optional(CONF_TOOLBAR): cv.boolean,
         vol.Optional(CONF_UI_MODE): vol.In(UI_MODES),
         vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
@@ -105,7 +108,10 @@ async def async_setup(hass, config):
     cfgs, panels, children = {}, {}, []
     for name, data in config.get(DOMAIN, {}).items():
         ingress_cfg = None
-        if data[CONF_INGRESS]:
+        work_mode = data.get(CONF_WORK_MODE)
+        if work_mode is None:
+            work_mode = 'ingress' if data[CONF_INGRESS] else 'iframe'
+        if work_mode != 'iframe':
             url = data[panel_iframe.CONF_URL].rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
@@ -118,6 +124,7 @@ async def async_setup(hass, config):
             )
             token = new_token(now, cfgs, ingress_cfg)
             cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
+            if work_mode == 'auth': cfg['url'] = url
         else:
             cfg = {'url': data[panel_iframe.CONF_URL]}
             if data[CONF_INDEX]:
@@ -188,7 +195,32 @@ class IngressView(HomeAssistantView):
         self._config = config
         self._websession = websession
 
+    async def _handle_auth(self, request):
+        cfg = None
+        # check ingressToken parameter
+        url = request.headers['X-Original-URI']
+        params = parse_qs(urlparse(url).query)
+        if 'ingressToken' in params:
+            token, cfg = get_cfg_by_token(self._hass, self._config, params['ingressToken'][0])
+        if cfg:
+            # valid, return 200
+            return web.Response(headers={'X-Auth-Token': token})
+        # check ingress_token cookie
+        name = request.headers['X-Ingress-Name']
+        cfg = get_cfg_by_cookie(request, self._config, name)
+        if cfg:
+            # valid, return 200
+            return web.Response()
+        # cookie invalid, try redirect to entry
+        for cfg in self._config.values():
+            if cfg.name == name and url.startswith(cfg.url + '/'):
+                url = urlencode({'replace':'', 'index':url[len(cfg.url):]})
+                raise web.HTTPUnauthorized(headers={'Location': f'/{cfg.entry}?{url}'})
+        raise web.HTTPNotFound()
+
     async def _handle(self, request, token, path):
+        if token == '_' and path == 'auth':
+            return await self._handle_auth(request)
         token, cfg = get_cfg_by_token(self._hass, self._config, token)
         if cfg:
             url = f'{API_BASE}/{cfg.name}/'
