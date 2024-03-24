@@ -10,7 +10,7 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 
 - Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/). (option: `work_mode: ingress`)
 - Sidebar function similar to [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/). (option: `work_mode: iframe`)
-- EXPERIMENTAL: Work with nginx auth_request for backend services can't be proxied by ingress. (option: `work_mode: auth`)
+- Work with nginx auth_request for backend services can't be proxied by ingress. (option: `work_mode: auth`)
 - Add any HA page as a sidebar panel. (option: `ui_mode: replace`)
 - Hide header on ingress panel pages. (option: `ui_mode: normal`)
 - Show header on ingress panel pages. (option: `ui_mode: toolbar`)
@@ -73,6 +73,11 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
       - ingress: Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/).
       - iframe: Sidebar function similar to [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/).
       - auth: Work with nginx auth_request for backend services can't be proxied by ingress.
+        ```ini
+        auth api: /api/ingress/_/auth
+        request header: X-Ingress-Name(ingress_name), X-Original-URI($request_uri)
+        response header: Set-Cookie(ingress_token) if succ, Location(login_url_path) if 401.
+        ```
     - **ui_mode**: string (oneof `replace` `normal` `toolbar`, default: normal)
       - replace: Redirect to the target url, useful when adding an HA page as a sidebar panel.
       - normal: No header on ingress panel pages.

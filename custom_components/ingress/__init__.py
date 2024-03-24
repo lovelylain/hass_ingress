@@ -13,7 +13,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
 from aiohttp import hdrs, web, WSMsgType
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -196,26 +196,36 @@ class IngressView(HomeAssistantView):
         self._websession = websession
 
     async def _handle_auth(self, request):
-        cfg = None
+        # check required header
+        name = request.headers.get('X-Ingress-Name')
+        url = request.headers.get('X-Original-URI')
+        if not name or not url:
+            raise web.HTTPNotFound()
         # check ingressToken parameter
-        url = request.headers['X-Original-URI']
-        params = parse_qs(urlparse(url).query)
+        cfg = None
+        url = urlparse(url)
+        params = parse_qs(url.query)
         if 'ingressToken' in params:
             token, cfg = get_cfg_by_token(self._hass, self._config, params['ingressToken'][0])
         if cfg:
             # valid, return 200
-            return web.Response(headers={'X-Auth-Token': token})
+            resp = web.Response()
+            resp.set_cookie(cfg.cookie_name, token, httponly=True)
+            return resp
         # check ingress_token cookie
-        name = request.headers['X-Ingress-Name']
         cfg = get_cfg_by_cookie(request, self._config, name)
         if cfg:
             # valid, return 200
             return web.Response()
         # cookie invalid, try redirect to entry
         for cfg in self._config.values():
-            if cfg.name == name and url.startswith(cfg.url + '/'):
-                url = urlencode({'replace':'', 'index':url[len(cfg.url):]})
-                raise web.HTTPUnauthorized(headers={'Location': f'/{cfg.entry}?{url}'})
+            if cfg.name == name:
+                params = {'replace': ''}
+                root = urlparse(cfg.url + '/').path
+                if url.path.startswith(root):
+                    params['index'] = urlunparse(('', '', url.path[len(root):]) + url[3:])
+                url = f'/{cfg.entry}?{urlencode(params)}'
+                raise web.HTTPUnauthorized(headers={'Location': url})
         raise web.HTTPNotFound()
 
     async def _handle(self, request, token, path):
