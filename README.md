@@ -83,6 +83,14 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
       - normal: No header on ingress panel pages.
       - toolbar: Show header on ingress panel pages. It is recommended to use toolbar instead of normal on HA versions higher than [2023.3.6](https://github.com/home-assistant/android/issues/3460).
     - **url**: string (REQUIRED) The absolute URL or relative URL with an absolute path to open.
+      If you want to use multiple front-end domains for `iframe` and `auth` mode, you can enable the extended configuration for the `url` option:
+      ```yaml
+      url:
+        match: JS regular expression to match scheme://host[:port].
+        replace: JS regular replacement to build real url.
+        default: Default url when regular expression does not match.
+      ```
+      For example, you use http://hass.web.local to access HA from the internal network, and https://hass.example.com from the external, you want to use http://openwrt.web.local to access auth mode openwrt from the internal, and https://openwrt.example.com from the external. You can set `match: (\w+://)hass(\..+)`, `replace: $1openwrt$2`, `default: https://openwrt.example.com` to achieve your goal.
     - **index**: string (optional, default empty) The relative URL of index page. If the `url` is http://127.0.0.1:45180/ui/, all access must be under the /ui/ path; if the `url` is http://127.0.0.1:45180 and the `index` is /ui/, all paths of http://127.0.0.1:45180 can be accessed.
     - **parent**: string (optional, default empty) Parent ingress panel name. If non-empty, this panel will be hidden from the HA sidebar and you can access it via the `/{parent panel_name}/{child panel_name}` link. For example, the parent panel `nodered`, the sub-panel `ui` or `nodered_ui`, you can access the sub-panel through `/nodered/ui`.
     - **headers**: map (optional) Additional http headers passed to the backend service, such as `authorization` for `basic auth`.

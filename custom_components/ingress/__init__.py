@@ -18,6 +18,9 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = 'ingress'
+CONF_MATCH = 'match'
+CONF_REPLACE = 'replace'
+CONF_DEFAULT = 'default'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
 CONF_INGRESS = 'ingress'
@@ -38,7 +41,11 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(panel_iframe.CONF_TITLE): cv.string,
         vol.Optional(panel_iframe.CONF_ICON): cv.icon,
         vol.Optional(panel_iframe.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
-        vol.Required(panel_iframe.CONF_URL): cv.string,
+        vol.Required(panel_iframe.CONF_URL): vol.Any(cv.string, vol.Schema({
+            vol.Required(CONF_MATCH): cv.string,
+            vol.Required(CONF_REPLACE): cv.string,
+            vol.Required(CONF_DEFAULT): cv.string,
+        })),
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_PARENT): cv.string,
         vol.Optional(CONF_INGRESS, default=True): cv.boolean,
@@ -111,8 +118,11 @@ async def async_setup(hass, config):
         work_mode = data.get(CONF_WORK_MODE)
         if work_mode is None:
             work_mode = 'ingress' if data[CONF_INGRESS] else 'iframe'
+        url, front_url = data[panel_iframe.CONF_URL], {}
+        if isinstance(url, dict):
+            url, front_url = url[CONF_DEFAULT], url
         if work_mode != 'iframe':
-            url = data[panel_iframe.CONF_URL].rstrip('/')
+            url = url.rstrip('/')
             if '://' not in url:
                 url = f'http://{url}'
             ingress_cfg = IngressCfg(
@@ -124,12 +134,13 @@ async def async_setup(hass, config):
             )
             token = new_token(now, cfgs, ingress_cfg)
             cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
-            if work_mode == 'auth': cfg['url'] = url
+            if work_mode == 'auth': cfg['url'] = front_url
         else:
-            cfg = {'url': data[panel_iframe.CONF_URL]}
+            cfg = {'url': front_url}
             if data[CONF_INDEX]:
-                cfg['url'] = cfg['url'].rstrip('/')
+                url = url.rstrip('/')
                 cfg['index'] = data[CONF_INDEX].lstrip('/')
+        front_url[CONF_DEFAULT] = url
 
         ui_mode = data.get(CONF_UI_MODE)
         if ui_mode is None:
