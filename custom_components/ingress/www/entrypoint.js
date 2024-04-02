@@ -1,3 +1,4 @@
+{
 class HaPanelIngress extends HTMLElement {
   constructor() {
     super();
@@ -8,18 +9,27 @@ class HaPanelIngress extends HTMLElement {
     if (this._setProperties) {
       this._setProperties(props);
     }
+
+    if (!props.panel && props.route) {
+      props.panel = props.hass?.panels?.[props.route.prefix.slice(1)];
+    }
     if (!props.panel) {
       return;
     }
 
-    let {config, title} = props.panel;
+    let {config, title, url_path:panelPath} = props.panel;
     if (config.children) {
-      const page = window.location.pathname.split('/')[2];
+      const page = (props.route?.path || '').split('/')[1];
       if (page && config.children.hasOwnProperty(page)) {
         config = config.children[page];
         title = config.title;
+        panelPath = `${panelPath}/${page}`;
       }
     }
+    if (this._panelPath === panelPath) {
+      return;
+    }
+    this._panelPath = panelPath;
 
     let {url:targetUrl, index} = config;
     if (typeof targetUrl === 'object') {
@@ -105,3 +115,4 @@ ${showToolbar ? `<hass-subpage main-page>${html}</hass-subpage>` : html}
   }
 }
 customElements.define('ha-panel-ingress', HaPanelIngress)
+}

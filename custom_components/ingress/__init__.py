@@ -140,7 +140,10 @@ async def async_setup(hass, config):
             if data[CONF_INDEX]:
                 url = url.rstrip('/')
                 cfg['index'] = data[CONF_INDEX].lstrip('/')
-        front_url[CONF_DEFAULT] = url
+        if front_url.get(CONF_MATCH):
+            front_url[CONF_DEFAULT] = url
+        elif 'url' in cfg:
+            cfg['url'] = url
 
         ui_mode = data.get(CONF_UI_MODE)
         if ui_mode is None:
