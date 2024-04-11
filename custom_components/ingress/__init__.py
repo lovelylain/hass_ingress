@@ -1,6 +1,7 @@
 import asyncio
 import base64
 from ipaddress import ip_address
+import re
 import os
 import time
 import logging
@@ -13,7 +14,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
 from aiohttp import hdrs, web, WSMsgType
-from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs, quote
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
-WORK_MODES = ['ingress', 'iframe', 'auth']
+WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio']
 UI_MODES = ['normal', 'toolbar', 'replace']
 
 CONFIG_SCHEMA = vol.Schema({
@@ -122,19 +123,29 @@ async def async_setup(hass, config):
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
         if work_mode != 'iframe':
-            url = url.rstrip('/')
-            if '://' not in url:
-                url = f'http://{url}'
-            ingress_cfg = IngressCfg(
+            if work_mode == 'hassio':
+                url, addon = 'hassio', url
+            else:
+                url = url.rstrip('/')
+                if '://' not in url:
+                    url = f'http://{url}'
+            ingress_cfg = dict(
                 name=name, url=url, entry=name,
-                headers=data.get(CONF_HEADERS),
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
-                disable_chunked=data.get(CONF_DISABLE_CHUNKED),
             )
+            if work_mode != 'auth':
+                ingress_cfg.update(
+                    headers=data.get(CONF_HEADERS),
+                    disable_chunked=data.get(CONF_DISABLE_CHUNKED),
+                )
+            ingress_cfg = IngressCfg(**ingress_cfg)
             token = new_token(now, cfgs, ingress_cfg)
             cfg = {'token': token, 'index': data[CONF_INDEX].lstrip('/')}
-            if work_mode == 'auth': cfg['url'] = front_url
+            if work_mode == 'auth':
+                cfg['url'] = front_url
+            elif work_mode == 'hassio':
+                cfg['addon'] = addon
         else:
             cfg = {'url': front_url}
             if data[CONF_INDEX]:
@@ -233,7 +244,7 @@ class IngressView(HomeAssistantView):
             return web.Response()
         # cookie invalid, try redirect to entry
         for cfg in self._config.values():
-            if cfg.name == name:
+            if cfg.name == name and cfg.url != 'hassio':
                 params = {'replace': ''}
                 root = urlparse(cfg.url + '/').path
                 if url.path.startswith(root):
@@ -263,7 +274,12 @@ class IngressView(HomeAssistantView):
                     path = urlencode({'replace':'', 'index':path})
                     raise web.HTTPFound(f'/{cfg.entry}?{path}')
             raise web.HTTPNotFound()
-        url = f'{cfg.url}/{path}'
+        if cfg.url == 'hassio':
+            if not path:
+                raise web.HTTPFound(f'/{cfg.entry}?replace')
+            url = f'http://{os.environ['SUPERVISOR']}/ingress/{quote(path)}'
+        else:
+            url = f'{cfg.url}/{path}'
 
         try:
             # Websocket
@@ -303,7 +319,7 @@ class IngressView(HomeAssistantView):
         # Start proxy
         async with self._websession.ws_connect(
             url,
-            headers=_init_header(request, cfg),
+            headers=_init_header(request, cfg, url),
             protocols=req_protocols,
             autoclose=False,
             autoping=False,
@@ -327,7 +343,7 @@ class IngressView(HomeAssistantView):
         async with self._websession.request(
             request.method,
             url,
-            headers=_init_header(request, cfg),
+            headers=_init_header(request, cfg, url),
             params=request.query,
             allow_redirects=False,
             data=data,
@@ -368,7 +384,7 @@ class IngressView(HomeAssistantView):
             return response
 
 
-def _init_header(request, cfg):
+def _init_header(request, cfg, url):
     headers = {}
 
     # filter flags
@@ -391,7 +407,10 @@ def _init_header(request, cfg):
         headers[name] = value
 
     # Set X-Ingress-Path
-    headers['X-Ingress-Path'] = f'{API_BASE}/{cfg.name}'
+    ingress_path = f'{API_BASE}/{cfg.name}'
+    if cfg.url == 'hassio':
+        ingress_path += re.search(r'/ingress(/[^/]+)/', url).group(1)
+    headers['X-Ingress-Path'] = ingress_path
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)

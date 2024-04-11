@@ -1,4 +1,72 @@
 {
+const fetchHassioAddonInfo = async (hass, addonSlug) => {
+  let addon;
+  try {
+    addon = await hass.callWS({
+      type: 'supervisor/api',
+      endpoint: `/addons/${addonSlug}/info`,
+      method: 'get',
+    });
+  } catch (err) {
+    addon = null;
+  }
+  return addon;
+};
+
+const createHassioSession = async (hass) => {
+  const resp = await hass.callWS({
+    type: 'supervisor/api',
+    endpoint: '/ingress/session',
+    method: 'post',
+  });
+  const session = resp.session;
+  document.cookie = `ingress_session=${session};path=/api/hassio_ingress/;SameSite=Strict${
+    location.protocol === "https:" ? ";Secure" : ""
+  }`;
+  return session;
+};
+
+const validateHassioSession = async (hass, session) => {
+  await hass.callWS({
+    type: 'supervisor/api',
+    endpoint: '/ingress/validate_session',
+    method: 'post',
+    data: {session},
+  });
+};
+
+const getHassioAddonUrl = async (elem, hass, addonSlug) => {
+  const showError = (msg) => {elem.shadowRoot.innerHTML = `<pre>${msg}</pre>`;};
+
+  const addon = await fetchHassioAddonInfo(hass, addonSlug);
+  if (!addon) {
+    return showError(`Unable to fetch add-on info of '${addonSlug}'`);
+  }
+  if (!addon.ingress_url) {
+    return showError(`Add-on '${addonSlug}' does not support Ingress`);
+  }
+  const targetUrl = addon.ingress_url.replace(/\/+$/, '');
+
+  let session;
+  if (elem._sessionKeepAlive) {
+    clearInterval(elem._sessionKeepAlive);
+  }
+  try {
+    session = await createHassioSession(hass);
+  } catch (err) {
+    return showError(`Unable to create an Ingress session`);
+  }
+  elem._sessionKeepAlive = window.setInterval(async () => {
+    try {
+      await validateHassioSession(hass, session);
+    } catch (err) {
+      session = await createHassioSession(hass);
+    }
+  }, 60000);
+
+  return targetUrl;
+};
+
 class HaPanelIngress extends HTMLElement {
   constructor() {
     super();
@@ -6,6 +74,10 @@ class HaPanelIngress extends HTMLElement {
   }
 
   setProperties(props) {
+    this.setPropertiesAsync(props).then();
+  }
+
+  async setPropertiesAsync(props) {
     if (this._setProperties) {
       this._setProperties(props);
     }
@@ -20,7 +92,7 @@ class HaPanelIngress extends HTMLElement {
     let {config, title, url_path:panelPath} = props.panel;
     if (config.children) {
       const page = (props.route?.path || '').split('/')[1];
-      if (page && config.children.hasOwnProperty(page)) {
+      if (page && Object.hasOwn(config.children, page)) {
         config = config.children[page];
         title = config.title;
         panelPath = `${panelPath}/${page}`;
@@ -31,7 +103,7 @@ class HaPanelIngress extends HTMLElement {
     }
     this._panelPath = panelPath;
 
-    let {url:targetUrl, index} = config;
+    let {url:targetUrl, addon:addonSlug, index} = config;
     if (typeof targetUrl === 'object') {
       const {match, replace} = targetUrl;
       targetUrl = targetUrl['default'];
@@ -46,7 +118,16 @@ class HaPanelIngress extends HTMLElement {
 
     const urlParams = new URLSearchParams(window.location.search);
     const isIngress = targetUrl === undefined;
-    if (isIngress) targetUrl = `/api/ingress/${config.token.value}`;
+    if (isIngress) {
+      targetUrl = `/api/ingress/${config.token.value}`;
+      if (addonSlug) {
+        targetUrl = await getHassioAddonUrl(this, props.hass, addonSlug);
+        if (!targetUrl) {
+          return;
+        }
+      }
+    }
+
     if (index !== undefined) {
       const path = urlParams.get('index');
       if (path && !/(^|\/)\.\.\//.test(path)) {
@@ -95,7 +176,7 @@ ${showToolbar ? `<hass-subpage main-page>${html}</hass-subpage>` : html}
         subpage.header = title;
         elem._setProperties = (props) => {
           for (const k of ['hass', 'narrow']) {
-            if (props.hasOwnProperty(k)) {
+            if (Object.hasOwn(props, k)) {
               subpage[k] = props[k];
             }
           }
