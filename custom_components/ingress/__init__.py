@@ -277,7 +277,7 @@ class IngressView(HomeAssistantView):
         if cfg.url == 'hassio':
             if not path:
                 raise web.HTTPFound(f'/{cfg.entry}?replace')
-            url = f'http://{os.environ['SUPERVISOR']}/ingress/{quote(path)}'
+            url = f"http://{os.environ['SUPERVISOR']}/ingress/{quote(path)}"
         else:
             url = f'{cfg.url}/{path}'
 
