@@ -9,7 +9,7 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 ## Features
 
 - Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/). (option: `work_mode: ingress`)
-- Sidebar function similar to [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/). (option: `work_mode: iframe`)
+- Sidebar function similar to [Webpage dashboard](https://www.home-assistant.io/dashboards/dashboards/#webpage-dashboard). (option: `work_mode: iframe`)
 - Work with nginx auth_request for backend services can't be proxied by ingress. (option: `work_mode: auth`)
 - Support hassio add-on ingress. (option: `work_mode: hassio` `url: addonSlug`)
 - Add any HA page as a sidebar panel. (option: `ui_mode: replace`)
@@ -72,14 +72,14 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
     - **work_mode**: string (oneof `ingress` `iframe` `auth` `hassio`, default: ingress)
       - ingress: Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/).
-      - iframe: Sidebar function similar to [Panel_iframe](https://www.home-assistant.io/integrations/panel_iframe/).
+      - iframe: Sidebar function similar to [Webpage dashboard](https://www.home-assistant.io/dashboards/dashboards/#webpage-dashboard).
       - auth: Work with nginx auth_request for backend services can't be proxied by ingress.
         ```ini
         auth_request api: /api/ingress/_/auth
         request header: X-Ingress-Name(ingress_name), X-Original-URI($request_uri)
         response header: Set-Cookie(ingress_token) if succ, Location(login_url_path) if 401.
         ```
-      - hassio: Support hassio add-on ingress, in this case set url with add-on slug, for example `url: a0d7b954_grafana`.
+      - hassio: Support hassio add-on ingress, in this case set url with add-on slug, for example `url: a0d7b954_grafana`. This mode does not enable add-ons that do not support ingress to support ingress, it only provides some personalized functions for the ingress sidebar, such as customizing the sidebar title and hiding the header.
     - **ui_mode**: string (oneof `replace` `normal` `toolbar`, default: normal)
       - replace: Redirect to the target url, useful when adding an HA page as a sidebar panel.
       - normal: No header on ingress panel pages.

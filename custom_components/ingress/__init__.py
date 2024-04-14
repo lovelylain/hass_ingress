@@ -7,8 +7,8 @@ import time
 import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
-from homeassistant.const import CONF_HEADERS
-from homeassistant.components import panel_custom, panel_iframe, frontend
+from homeassistant.const import CONF_HEADERS, CONF_ICON, CONF_URL
+from homeassistant.components import panel_custom, frontend
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qs, quote
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = 'ingress'
+CONF_TITLE = 'title'
 CONF_MATCH = 'match'
 CONF_REPLACE = 'replace'
 CONF_DEFAULT = 'default'
@@ -39,10 +40,10 @@ UI_MODES = ['normal', 'toolbar', 'replace']
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
-        vol.Optional(panel_iframe.CONF_TITLE): cv.string,
-        vol.Optional(panel_iframe.CONF_ICON): cv.icon,
-        vol.Optional(panel_iframe.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
-        vol.Required(panel_iframe.CONF_URL): vol.Any(cv.string, vol.Schema({
+        vol.Optional(panel_custom.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
+        vol.Optional(CONF_TITLE): cv.string,
+        vol.Optional(CONF_ICON): cv.icon,
+        vol.Required(CONF_URL): vol.Any(cv.string, vol.Schema({
             vol.Required(CONF_MATCH): cv.string,
             vol.Required(CONF_REPLACE): cv.string,
             vol.Required(CONF_DEFAULT): cv.string,
@@ -119,7 +120,7 @@ async def async_setup(hass, config):
         work_mode = data.get(CONF_WORK_MODE)
         if work_mode is None:
             work_mode = 'ingress' if data[CONF_INGRESS] else 'iframe'
-        url, front_url = data[panel_iframe.CONF_URL], {}
+        url, front_url = data[CONF_URL], {}
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
         if work_mode != 'iframe':
@@ -160,7 +161,7 @@ async def async_setup(hass, config):
         if ui_mode is None:
             ui_mode = 'toolbar' if data.get(CONF_TOOLBAR) else 'normal'
         cfg['ui_mode'] = ui_mode
-        title = data.get(panel_iframe.CONF_TITLE)
+        title = data.get(CONF_TITLE)
         parent = data.get(CONF_PARENT)
         if parent:
             if name.startswith(parent) and name[len(parent):len(parent)+1] == '_':
@@ -176,8 +177,8 @@ async def async_setup(hass, config):
             js_url = f'{URL_BASE}/entrypoint.js',
             frontend_url_path = name,
             sidebar_title = title,
-            sidebar_icon = data.get(panel_iframe.CONF_ICON),
-            require_admin = data[panel_iframe.CONF_REQUIRE_ADMIN],
+            sidebar_icon = data.get(CONF_ICON),
+            require_admin = data[panel_custom.CONF_REQUIRE_ADMIN],
             embed_iframe = False,
             config = cfg,
         )

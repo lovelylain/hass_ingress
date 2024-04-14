@@ -1,7 +1,7 @@
 {
   "domain": "ingress",
   "name": "Ingress",
-  "after_dependencies": ["panel_custom","panel_iframe"],
+  "after_dependencies": ["panel_custom"],
   "codeowners": ["@lovelylain"],
   "config_flow": false,
   "dependencies": ["http"],

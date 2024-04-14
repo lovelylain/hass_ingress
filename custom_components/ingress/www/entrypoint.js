@@ -20,6 +20,7 @@ const createHassioSession = async (hass) => {
     method: 'post',
   });
   const session = resp.session;
+  // document.cookie = `ingress_session=${session};path=/api/ingress/;SameSite=Strict${
   document.cookie = `ingress_session=${session};path=/api/hassio_ingress/;SameSite=Strict${
     location.protocol === "https:" ? ";Secure" : ""
   }`;
@@ -35,7 +36,7 @@ const validateHassioSession = async (hass, session) => {
   });
 };
 
-const getHassioAddonUrl = async (elem, hass, addonSlug) => {
+const getHassioAddonUrl = async (elem, hass, addonSlug, baseUrl) => {
   const showError = (msg) => {elem.shadowRoot.innerHTML = `<pre>${msg}</pre>`;};
 
   const addon = await fetchHassioAddonInfo(hass, addonSlug);
@@ -45,6 +46,7 @@ const getHassioAddonUrl = async (elem, hass, addonSlug) => {
   if (!addon.ingress_url) {
     return showError(`Add-on '${addonSlug}' does not support Ingress`);
   }
+  // const targetUrl = baseUrl + addon.ingress_url.replace(/^\/api\/hassio_ingress(\/[^/]+).*/, '$1');
   const targetUrl = addon.ingress_url.replace(/\/+$/, '');
 
   let session;
@@ -121,7 +123,7 @@ class HaPanelIngress extends HTMLElement {
     if (isIngress) {
       targetUrl = `/api/ingress/${config.token.value}`;
       if (addonSlug) {
-        targetUrl = await getHassioAddonUrl(this, props.hass, addonSlug);
+        targetUrl = await getHassioAddonUrl(this, props.hass, addonSlug, targetUrl);
         if (!targetUrl) {
           return;
         }
