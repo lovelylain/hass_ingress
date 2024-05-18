@@ -132,12 +132,12 @@ async def async_setup(hass, config):
                     url = f'http://{url}'
             ingress_cfg = dict(
                 name=name, url=url, entry=name,
+                headers=data.get(CONF_HEADERS),
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
             )
             if work_mode != 'auth':
                 ingress_cfg.update(
-                    headers=data.get(CONF_HEADERS),
                     disable_chunked=data.get(CONF_DISABLE_CHUNKED),
                 )
             ingress_cfg = IngressCfg(**ingress_cfg)
@@ -224,7 +224,7 @@ class IngressView(HomeAssistantView):
     async def _handle_auth(self, request):
         # check required header
         name = request.headers.get('X-Ingress-Name')
-        url = request.headers.get('X-Original-URI')
+        url = request.headers.get('X-Original-URL')
         if not name or not url:
             raise web.HTTPNotFound()
         # check ingressToken parameter
@@ -234,15 +234,21 @@ class IngressView(HomeAssistantView):
         if 'ingressToken' in params:
             token, cfg = get_cfg_by_token(self._hass, self._config, params['ingressToken'][0])
         if cfg:
-            # valid, return 200
-            resp = web.Response()
+            # valid, remove ingressToken if has X-Hass-Origin else return 200
+            hass_origin = request.headers.get('X-Hass-Origin')
+            if hass_origin:
+                del params['ingressToken']
+                url = url._replace(query=urlencode(params, doseq=True)).geturl()
+                resp = web.HTTPUnauthorized(headers={'Location': url})
+            else:
+                resp = web.Response(headers=cfg.headers)
             resp.set_cookie(cfg.cookie_name, token, httponly=True)
             return resp
         # check ingress_token cookie
         cfg = get_cfg_by_cookie(request, self._config, name)
         if cfg:
             # valid, return 200
-            return web.Response()
+            return web.Response(headers=cfg.headers)
         # cookie invalid, try redirect to entry
         for cfg in self._config.values():
             if cfg.name == name and cfg.url != 'hassio':
@@ -250,7 +256,8 @@ class IngressView(HomeAssistantView):
                 root = urlparse(cfg.url + '/').path
                 if url.path.startswith(root):
                     params['index'] = urlunparse(('', '', url.path[len(root):]) + url[3:])
-                url = f'/{cfg.entry}?{urlencode(params)}'
+                hass_origin = request.headers.get('X-Hass-Origin', '')
+                url = f'{hass_origin}/{cfg.entry}?{urlencode(params)}'
                 raise web.HTTPUnauthorized(headers={'Location': url})
         raise web.HTTPNotFound()
 

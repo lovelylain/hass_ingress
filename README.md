@@ -76,7 +76,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
       - auth: Work with nginx auth_request for backend services can't be proxied by ingress.
         ```ini
         auth_request api: /api/ingress/_/auth
-        request header: X-Ingress-Name(ingress_name), X-Original-URI($request_uri)
+        request header: X-Ingress-Name(ingress_name), X-Original-URL($scheme://$http_host$request_uri), X-Hass-Origin(hass_url)
         response header: Set-Cookie(ingress_token) if succ, Location(login_url_path) if 401.
         ```
       - hassio: Support hassio add-on ingress, in this case set url with add-on slug, for example `url: a0d7b954_grafana`. This mode does not enable add-ons that do not support ingress to support ingress, it only provides some personalized functions for the ingress sidebar, such as customizing the sidebar title and hiding the header.
