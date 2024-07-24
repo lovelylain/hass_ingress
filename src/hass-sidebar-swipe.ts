@@ -1,11 +1,11 @@
-import {BehaviorSubject, map, switchMap} from 'rxjs'
-import {createBackSwipe, createEdgeSwipe} from './events'
-import {shadowQuery} from './utils'
-import {HaPanelLovelace} from './ha-interfaces'
+import { BehaviorSubject, map, switchMap } from "rxjs";
+import { createBackSwipe, createEdgeSwipe } from "./events";
+import { shadowQuery } from "./utils";
+import { HaPanelLovelace } from "./ha-interfaces";
 
-const drawer = shadowQuery('home-assistant >>> home-assistant-main >>> ha-drawer')
-const sidebar = shadowQuery('ha-sidebar', drawer)
-const panel = shadowQuery('ha-panel-lovelace', drawer) as HaPanelLovelace
+const drawer = shadowQuery("home-assistant >>> home-assistant-main >>> ha-drawer");
+const sidebar = shadowQuery("ha-sidebar", drawer);
+const panel = shadowQuery("ha-panel-lovelace", drawer) as HaPanelLovelace;
 
 // Get config and set defaults
 // TODO: Watch config changes
@@ -16,16 +16,16 @@ const {
   prevent_others = true,
   lock_vertical_scroll = true,
   exclusions = [],
-} = panel?.lovelace?.config?.sidebar_swipe || {}
+} = panel?.lovelace?.config?.sidebar_swipe || {};
 
-if (sidebar && getComputedStyle(sidebar).display !== 'none') {
+if (sidebar && getComputedStyle(sidebar).display !== "none") {
   // Sync drawer open state
-  const isOpen$ = new BehaviorSubject(false)
+  const isOpen$ = new BehaviorSubject(false);
 
   const backSwipe$ = createBackSwipe({
     threshold: back_threshold,
     preventOthers: prevent_others,
-  })
+  });
 
   const edgeSwipe$ = createEdgeSwipe({
     startThreshold: start_threshold,
@@ -33,12 +33,16 @@ if (sidebar && getComputedStyle(sidebar).display !== 'none') {
     preventOthers: prevent_others,
     lockVerticalScroll: lock_vertical_scroll,
     exclusions,
-  })
+  });
 
   if (drawer) {
     new MutationObserver((mutationList: MutationRecord[]) => {
-      isOpen$.next(mutationList[0].oldValue === null)
-    }).observe(drawer, {attributes: true, attributeOldValue: true, attributeFilter: ['open']})
+      isOpen$.next(mutationList[0].oldValue === null);
+    }).observe(drawer, {
+      attributes: true,
+      attributeOldValue: true,
+      attributeFilter: ["open"],
+    });
   }
 
   isOpen$
@@ -48,8 +52,8 @@ if (sidebar && getComputedStyle(sidebar).display !== 'none') {
       )
     )
     .subscribe((open: boolean) => {
-      shadowQuery('home-assistant >>> home-assistant-main')?.dispatchEvent(
-        new CustomEvent('hass-toggle-menu', {detail: {open}})
-      )
-    })
+      shadowQuery("home-assistant >>> home-assistant-main")?.dispatchEvent(
+        new CustomEvent("hass-toggle-menu", { detail: { open } })
+      );
+    });
 }

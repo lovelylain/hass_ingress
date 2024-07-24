@@ -78,19 +78,19 @@
     </home-assistant>
     <script>
       document
-        .querySelector('home-assistant-main')
-        .addEventListener('hass-toggle-menu', ({detail: {open}}) => {
-          document.querySelector('ha-drawer').toggleAttribute('open', open)
-        })
+        .querySelector("home-assistant-main")
+        .addEventListener("hass-toggle-menu", ({ detail: { open } }) => {
+          document.querySelector("ha-drawer").toggleAttribute("open", open);
+        });
 
-      document.addEventListener('click', () => {
-        document.querySelector('ha-drawer').toggleAttribute('open', false)
-      })
+      document.addEventListener("click", () => {
+        document.querySelector("ha-drawer").toggleAttribute("open", false);
+      });
 
-      document.getElementById('menu').addEventListener('click', (event) => {
-        event.stopPropagation()
-        document.querySelector('ha-drawer').setAttribute('open', true)
-      })
+      document.getElementById("menu").addEventListener("click", (event) => {
+        event.stopPropagation();
+        document.querySelector("ha-drawer").setAttribute("open", true);
+      });
     </script>
   </body>
 </html>
