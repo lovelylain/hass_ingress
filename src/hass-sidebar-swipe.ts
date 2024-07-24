@@ -1,24 +1,31 @@
 import { BehaviorSubject, map, switchMap } from "rxjs";
 import { createBackSwipe, createEdgeSwipe } from "./events";
 import { shadowQuery } from "./utils";
-import { HaPanelLovelace } from "./ha-interfaces";
+import { SidebarSwipeConfig, HaPanelLovelace } from "./ha-interfaces";
 
-const drawer = shadowQuery("home-assistant >>> home-assistant-main >>> ha-drawer");
-const sidebar = shadowQuery("ha-sidebar", drawer);
-const panel = shadowQuery("ha-panel-lovelace", drawer) as HaPanelLovelace;
+export const enableSidebarSwipe = (config?: SidebarSwipeConfig) => {
+  const drawer = shadowQuery("home-assistant >>> home-assistant-main >>> ha-drawer");
+  const sidebar = shadowQuery("ha-sidebar", drawer);
+  if (!sidebar || getComputedStyle(sidebar).display === "none") {
+    return;
+  }
 
-// Get config and set defaults
-// TODO: Watch config changes
-const {
-  start_threshold = 0.1,
-  end_threshold = 0.13,
-  back_threshold = 50,
-  prevent_others = true,
-  lock_vertical_scroll = true,
-  exclusions = [],
-} = panel?.lovelace?.config?.sidebar_swipe || {};
+  if (!config) {
+    const panel = shadowQuery("ha-panel-lovelace", drawer) as HaPanelLovelace;
+    config = panel?.lovelace?.config?.sidebar_swipe || {};
+  }
 
-if (sidebar && getComputedStyle(sidebar).display !== "none") {
+  // Get config and set defaults
+  // TODO: Watch config changes
+  const {
+    start_threshold = 0.1,
+    end_threshold = 0.13,
+    back_threshold = 50,
+    prevent_others = true,
+    lock_vertical_scroll = true,
+    exclusions = [],
+  } = config;
+
   // Sync drawer open state
   const isOpen$ = new BehaviorSubject(false);
 
@@ -56,4 +63,4 @@ if (sidebar && getComputedStyle(sidebar).display !== "none") {
         new CustomEvent("hass-toggle-menu", { detail: { open } })
       );
     });
-}
+};
