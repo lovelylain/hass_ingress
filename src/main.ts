@@ -1,3 +1,1 @@
-import { enableSidebarSwipe } from "./hass-sidebar-swipe";
-
-enableSidebarSwipe();
+import "./ha-panel-ingress";

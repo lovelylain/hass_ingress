@@ -14,7 +14,7 @@
         display: block;
         height: 100vh;
       }
-      ha-drawer {
+      ha-sidebar {
         position: absolute;
         z-index: 1;
         top: 0;
@@ -25,7 +25,7 @@
         transform: translateX(-100%);
         transition: transform 0.3s ease;
       }
-      ha-drawer[open] {
+      ha-sidebar[open] {
         transform: translateX(0);
       }
       #menu {
@@ -72,7 +72,12 @@
         <div class="start-threshold">Start Threshold</div>
         <div class="end-threshold">End Threshold</div>
         <ha-drawer>
-          <ha-sidebar />
+          <ha-sidebar></ha-sidebar>
+          <partial-panel-resolver>
+            <ha-panel-custom>
+              <ha-panel-ingress></ha-panel-ingress>
+            </ha-panel-custom>
+          </partial-panel-resolver>
         </ha-drawer>
       </home-assistant-main>
     </home-assistant>
@@ -80,17 +85,27 @@
       document
         .querySelector("home-assistant-main")
         .addEventListener("hass-toggle-menu", ({ detail: { open } }) => {
-          document.querySelector("ha-drawer").toggleAttribute("open", open);
+          document.querySelector("ha-sidebar").toggleAttribute("open", open);
         });
 
       document.addEventListener("click", () => {
-        document.querySelector("ha-drawer").toggleAttribute("open", false);
+        document.querySelector("ha-sidebar").toggleAttribute("open", false);
       });
 
       document.getElementById("menu").addEventListener("click", (event) => {
         event.stopPropagation();
-        document.querySelector("ha-drawer").setAttribute("open", true);
+        document.querySelector("ha-sidebar").setAttribute("open", true);
       });
+
+      (async () => {
+        await customElements.whenDefined("ha-panel-ingress");
+        document.querySelector("ha-panel-ingress").setProperties({
+          panel: {
+            config: { url: "https://demo.home-assistant.io/" },
+            url_path: "/",
+          },
+        });
+      })();
     </script>
   </body>
 </html>
