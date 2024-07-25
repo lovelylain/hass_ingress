@@ -1,5 +1,5 @@
 {
-  "name": "hass-ingress-entrypoint",
+  "name": "ha-panel-ingress",
   "private": true,
   "version": "0.0.0",
   "type": "module",
