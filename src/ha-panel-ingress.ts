@@ -5,6 +5,7 @@ import {
   navigate,
   ensureHaPanel,
 } from "./ha-interfaces";
+import { enableSidebarSwipe } from "./hass-sidebar-swipe";
 import { mdiCoffeeOutline } from "@mdi/js";
 
 // hassio addon ingress
@@ -225,15 +226,7 @@ class HaPanelIngress extends HTMLElement {
     let html = `
 <iframe ${title ? `title="${title}"` : ""} src="${targetUrl}" allow="fullscreen"></iframe>
 `;
-
-    const showToolbar = config.ui_mode === "toolbar";
-    if (showToolbar) {
-      await ensureHaPanel("iframe");
-      html = `<hass-subpage main-page>${html}</hass-subpage>`;
-    }
-
-    html = `
-<style>
+    let css = `
   iframe {
     border: 0;
     width: 100%;
@@ -241,12 +234,28 @@ class HaPanelIngress extends HTMLElement {
     display: block;
     background-color: var(--primary-background-color);
   }
-</style>
-${html}
 `;
 
+    const showToolbar = config.ui_mode === "toolbar";
+    if (/*!showToolbar &&*/ enableSidebarSwipe()) {
+      html += '<div id="swipebar"></div>';
+      css += `
+  #swipebar {
+    position: fixed;
+    top: 0;
+    width: 20px;
+    height: 100%;
+  }
+`;
+    }
+
+    if (showToolbar) {
+      await ensureHaPanel("iframe");
+      html = `<hass-subpage main-page>${html}</hass-subpage>`;
+    }
+
     const root = this.shadowRoot as ShadowRoot;
-    root.innerHTML = html;
+    root.innerHTML = `<style>${css}</style>${html}`;
     if (showToolbar) {
       const subpage = root.querySelector("hass-subpage") as any;
       subpage.header = title;

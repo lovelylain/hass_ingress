@@ -3,11 +3,15 @@ import { createBackSwipe, createEdgeSwipe } from "./events";
 import { shadowQuery } from "./utils";
 import { SidebarSwipeConfig, HaPanelLovelace } from "./ha-interfaces";
 
-export const enableSidebarSwipe = (config?: SidebarSwipeConfig) => {
+let isInitialized = false;
+export const enableSidebarSwipe = (config?: SidebarSwipeConfig): boolean => {
+  if (isInitialized) {
+    return true;
+  }
   const drawer = shadowQuery("home-assistant >>> home-assistant-main >>> ha-drawer");
   const sidebar = shadowQuery("ha-sidebar", drawer);
   if (!sidebar || getComputedStyle(sidebar).display === "none") {
-    return;
+    return false;
   }
 
   if (!config) {
@@ -63,4 +67,7 @@ export const enableSidebarSwipe = (config?: SidebarSwipeConfig) => {
         new CustomEvent("hass-toggle-menu", { detail: { open } })
       );
     });
+
+  isInitialized = true;
+  return true;
 };
