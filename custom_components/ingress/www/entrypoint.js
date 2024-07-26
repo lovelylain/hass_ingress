@@ -119,7 +119,7 @@ function S(t) {
   };
   throw new TypeError(r ? "Object is not iterable." : "Symbol.iterator is not defined.");
 }
-function O(t, r) {
+function A(t, r) {
   var e = typeof Symbol == "function" && t[Symbol.iterator];
   if (!e) return t;
   var n = e.call(t), i, o = [], s;
@@ -136,7 +136,7 @@ function O(t, r) {
   }
   return o;
 }
-function M(t, r, e) {
+function H(t, r, e) {
   if (e || arguments.length === 2) for (var n = 0, i = r.length, o; n < i; n++)
     (o || !(n in r)) && (o || (o = Array.prototype.slice.call(r, 0, n)), o[n] = r[n]);
   return t.concat(o || Array.prototype.slice.call(r));
@@ -225,7 +225,7 @@ function F(t, r) {
     0 <= e && t.splice(e, 1);
   }
 }
-var C = function() {
+var M = function() {
   function t(r) {
     this.initialTeardown = r, this.closed = !1, this._parentage = null, this._finalizers = null;
   }
@@ -268,7 +268,7 @@ var C = function() {
             try {
               W(v);
             } catch (p) {
-              o = o ?? [], p instanceof L ? o = M(M([], O(o)), O(p.errors)) : o.push(p);
+              o = o ?? [], p instanceof L ? o = H(H([], A(o)), A(p.errors)) : o.push(p);
             }
           }
         } catch (p) {
@@ -313,9 +313,9 @@ var C = function() {
     var r = new t();
     return r.closed = !0, r;
   }(), t;
-}(), te = C.EMPTY;
+}(), te = M.EMPTY;
 function re(t) {
-  return t instanceof C || t && "closed" in t && h(t.remove) && h(t.add) && h(t.unsubscribe);
+  return t instanceof M || t && "closed" in t && h(t.remove) && h(t.add) && h(t.unsubscribe);
 }
 function W(t) {
   h(t) ? t() : t.unsubscribe();
@@ -330,7 +330,7 @@ var ne = {
   setTimeout: function(t, r) {
     for (var e = [], n = 2; n < arguments.length; n++)
       e[n - 2] = arguments[n];
-    return setTimeout.apply(void 0, M([t, r], O(e)));
+    return setTimeout.apply(void 0, H([t, r], A(e)));
   },
   clearTimeout: function(t) {
     var r = oe.delegate;
@@ -379,7 +379,7 @@ var z = function(t) {
       this.unsubscribe();
     }
   }, r;
-}(C), we = Function.prototype.bind;
+}(M), we = Function.prototype.bind;
 function R(t, r) {
   return we.call(t, r);
 }
@@ -549,9 +549,9 @@ function w(t) {
   };
 }
 function m(t, r, e, n, i) {
-  return new Oe(t, r, e, n, i);
+  return new Ae(t, r, e, n, i);
 }
-var Oe = function(t) {
+var Ae = function(t) {
   E(r, t);
   function r(e, n, i, o, s, c) {
     var u = t.call(this, e) || this;
@@ -657,7 +657,7 @@ var Oe = function(t) {
     return this._throwIfClosed(), this._checkFinalizedStatuses(e), this._innerSubscribe(e);
   }, r.prototype._innerSubscribe = function(e) {
     var n = this, i = this, o = i.hasError, s = i.isStopped, c = i.observers;
-    return o || s ? te : (this.currentObservers = null, c.push(e), new C(function() {
+    return o || s ? te : (this.currentObservers = null, c.push(e), new M(function() {
       n.currentObservers = null, F(c, e);
     }));
   }, r.prototype._checkFinalizedStatuses = function(e) {
@@ -688,7 +688,7 @@ var Oe = function(t) {
     var n, i;
     return (i = (n = this.source) === null || n === void 0 ? void 0 : n.subscribe(e)) !== null && i !== void 0 ? i : te;
   }, r;
-}(ae), Ae = function(t) {
+}(ae), Oe = function(t) {
   E(r, t);
   function r(e) {
     var n = t.call(this) || this;
@@ -728,12 +728,12 @@ function $e(t) {
 function Ue(t) {
   return new TypeError("You provided " + (t !== null && typeof t == "object" ? "an invalid object" : "'" + t + "'") + " where a stream was expected. You can provide an Observable, Promise, ReadableStream, Array, AsyncIterable, or Iterable.");
 }
-function Me() {
+function He() {
   return typeof Symbol != "function" || !Symbol.iterator ? "@@iterator" : Symbol.iterator;
 }
-var Ce = Me();
-function He(t) {
-  return h(t == null ? void 0 : t[Ce]);
+var Me = He();
+function Ce(t) {
+  return h(t == null ? void 0 : t[Me]);
 }
 function Le(t) {
   return be(this, arguments, function() {
@@ -769,7 +769,7 @@ function Le(t) {
 function Re(t) {
   return h(t == null ? void 0 : t.getReader);
 }
-function A(t) {
+function O(t) {
   if (t instanceof b)
     return t;
   if (t != null) {
@@ -781,7 +781,7 @@ function A(t) {
       return Be(t);
     if ($e(t))
       return le(t);
-    if (He(t))
+    if (Ce(t))
       return Ye(t);
     if (Re(t))
       return qe(t);
@@ -891,7 +891,7 @@ function T(t, r) {
 }
 var De = Array.isArray;
 function Ge(t, r) {
-  return De(r) ? t.apply(void 0, M([], O(r))) : t(r);
+  return De(r) ? t.apply(void 0, H([], A(r))) : t(r);
 }
 function We(t) {
   return T(function(r) {
@@ -906,7 +906,7 @@ function Ke(t, r, e, n, i, o, s, c) {
   }, v = function(p) {
     a++;
     var k = !1;
-    A(e(p, l++)).subscribe(m(r, function(x) {
+    O(e(p, l++)).subscribe(m(r, function(x) {
       r.next(x);
     }, function() {
       k = !0;
@@ -915,13 +915,13 @@ function Ke(t, r, e, n, i, o, s, c) {
         try {
           a--;
           for (var x = function() {
-            var H = u.shift();
-            s || v(H);
+            var C = u.shift();
+            s || v(C);
           }; u.length && a < n; )
             x();
           y();
-        } catch (H) {
-          r.error(H);
+        } catch (C) {
+          r.error(C);
         }
     }));
   };
@@ -934,7 +934,7 @@ function fe(t, r, e) {
   return e === void 0 && (e = 1 / 0), h(r) ? fe(function(n, i) {
     return T(function(o, s) {
       return r(n, o, i, s);
-    })(A(t(n, i)));
+    })(O(t(n, i)));
   }, e) : (typeof r == "number" && (e = r), w(function(n, i) {
     return Ke(n, i, t, e);
   }));
@@ -943,7 +943,7 @@ var Qe = ["addListener", "removeListener"], Je = ["addEventListener", "removeEve
 function g(t, r, e, n) {
   if (h(e) && (n = e, e = void 0), n)
     return g(t, r, e).pipe(We(n));
-  var i = O(et(t) ? Je.map(function(c) {
+  var i = A(et(t) ? Je.map(function(c) {
     return function(u) {
       return t[c](r, u, e);
     };
@@ -951,7 +951,7 @@ function g(t, r, e, n) {
   if (!o && ce(t))
     return fe(function(c) {
       return g(c, r, e);
-    })(A(t));
+    })(O(t));
   if (!o)
     throw new TypeError("Invalid event target");
   return new b(function(c) {
@@ -1036,7 +1036,7 @@ function G(t, r) {
     e.subscribe(m(n, function(u) {
       i == null || i.unsubscribe();
       var a = 0, l = o++;
-      A(t(u, l)).subscribe(i = m(n, function(d) {
+      O(t(u, l)).subscribe(i = m(n, function(d) {
         return n.next(r ? r(u, d, l, a++) : d);
       }, function() {
         i = null, c();
@@ -1048,7 +1048,7 @@ function G(t, r) {
 }
 function rt(t) {
   return w(function(r, e) {
-    A(t).subscribe(m(e, function() {
+    O(t).subscribe(m(e, function() {
       return e.complete();
     }, B)), !e.closed && r.subscribe(e);
   });
@@ -1175,7 +1175,7 @@ const ut = (t) => {
     prevent_others: s = !0,
     lock_vertical_scroll: c = !0,
     exclusions: u = []
-  } = t, a = new Ae(!1), l = at({
+  } = t, a = new Oe(!1), l = at({
     threshold: o,
     preventOthers: s
   }), d = st({
@@ -1335,29 +1335,29 @@ class dt extends HTMLElement {
     width: 20px;
     height: 100%;
   }
-`), c && (await ve("iframe"), o = `<hass-subpage main-page>${o}</hass-subpage>`);
+`), c && (await ve("iframe"), o = `<hass-subpage main-page>${o}
+<ha-icon-button slot="toolbar-icon"></ha-icon-button>
+</hass-subpage>`);
     const u = this.shadowRoot;
     if (u.innerHTML = `<style>${s}</style>${o}`, c) {
       const a = u.querySelector("hass-subpage");
       a.header = i, this._setProperties = (l) => {
         for (const d of ["hass", "narrow"])
           d in l && (a[d] = l[d]);
-      }, this._setProperties(n), this._addButtons(a.shadowRoot);
+      }, this._setProperties(n), this._setButtons(a);
     }
   }
-  _addButtons(r) {
-    if (!r) return;
-    const e = new MutationObserver(function() {
-      const n = r.querySelector("div.toolbar");
-      if (!n) return;
-      e.disconnect();
-      const i = document.createElement("ha-icon-button");
-      i.path = ct, i.label = "Donate", i.addEventListener("click", () => {
-        const o = document.createElement("a");
-        o.href = "https://buymeacoffee.com/lovelylain", o.target = "_blank", o.rel = "noreferrer", o.click();
-      }), n.appendChild(i);
-    });
-    e.observe(r, { childList: !0 });
+  _setButtons(r) {
+    for (const [e, n] of r.querySelectorAll("ha-icon-button").entries())
+      switch (e) {
+        case 0: {
+          n.label = "Donate", n.path = ct, n.addEventListener("click", () => {
+            const i = document.createElement("a");
+            i.href = "https://buymeacoffee.com/lovelylain", i.target = "_blank", i.rel = "noreferrer", i.click();
+          });
+          break;
+        }
+      }
   }
 }
 customElements.define("ha-panel-ingress", dt);
