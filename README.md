@@ -20,6 +20,7 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Embed in other pages. (url: `/api/ingress/{name}/`)
 - Passing url parameters. (url: `/{panel}?index={overwrite_index}`)
 - Reload Ingress configuration without restarting HA.
+- Toggle Home Assistant sidebar via swipe gestures(code from [hass-sidebar-swipe](https://github.com/breakthestatic/hass-sidebar-swipe)).
 
 ## Install
 
@@ -83,7 +84,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **ui_mode**: string (oneof `replace` `normal` `toolbar`, default: normal)
       - replace: Redirect to the target url, useful when adding an HA page as a sidebar panel.
       - normal: No header on ingress panel pages.
-      - toolbar: Show header on ingress panel pages. It is recommended to use toolbar instead of normal on HA versions higher than [2023.3.6](https://github.com/home-assistant/android/issues/3460).
+      - toolbar: Show header on ingress panel pages.
     - **url**: string (REQUIRED) The absolute URL or relative URL with an absolute path to open.
       If you want to use multiple front-end domains for `iframe` and `auth` mode, you can enable the extended configuration for the `url` option:
       ```yaml
