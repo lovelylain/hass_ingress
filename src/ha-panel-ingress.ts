@@ -251,7 +251,9 @@ class HaPanelIngress extends HTMLElement {
 
     if (showToolbar) {
       await ensureHaPanel("iframe");
-      html = `<hass-subpage main-page>${html}</hass-subpage>`;
+      html = `<hass-subpage main-page>${html}
+<ha-icon-button slot="toolbar-icon"></ha-icon-button>
+</hass-subpage>`;
     }
 
     const root = this.shadowRoot as ShadowRoot;
@@ -267,29 +269,27 @@ class HaPanelIngress extends HTMLElement {
         }
       };
       this._setProperties(props);
-      this._addButtons(subpage.shadowRoot);
+      this._setButtons(subpage);
     }
   }
 
-  private _addButtons(root: ShadowRoot) {
-    if (!root) return;
-    const observer = new MutationObserver(function () {
-      const toolbar = root.querySelector("div.toolbar");
-      if (!toolbar) return;
-      observer.disconnect();
-      const button = document.createElement("ha-icon-button");
-      (button as any).path = mdiCoffeeOutline;
-      (button as any).label = "Donate";
-      button.addEventListener("click", () => {
-        const link = document.createElement("a");
-        link.href = "https://buymeacoffee.com/lovelylain";
-        link.target = "_blank";
-        link.rel = "noreferrer";
-        link.click();
-      });
-      toolbar.appendChild(button);
-    });
-    observer.observe(root, { childList: true });
+  private _setButtons(page: Element) {
+    for (const [index, button] of page.querySelectorAll("ha-icon-button").entries()) {
+      switch (index) {
+        case 0: {
+          (button as any).label = "Donate";
+          (button as any).path = mdiCoffeeOutline;
+          button.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.href = "https://buymeacoffee.com/lovelylain";
+            link.target = "_blank";
+            link.rel = "noreferrer";
+            link.click();
+          });
+          break;
+        }
+      }
+    }
   }
 }
 
