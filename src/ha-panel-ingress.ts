@@ -5,6 +5,7 @@ import {
   navigate,
   ensureHaPanel,
 } from "./ha-interfaces";
+import { mdiCoffeeOutline } from "@mdi/js";
 
 // hassio addon ingress
 interface HassioAddonDetails {
@@ -257,7 +258,29 @@ ${html}
         }
       };
       this._setProperties(props);
+      this._addButtons(subpage.shadowRoot);
     }
+  }
+
+  private _addButtons(root: ShadowRoot) {
+    if (!root) return;
+    const observer = new MutationObserver(function () {
+      const toolbar = root.querySelector("div.toolbar");
+      if (!toolbar) return;
+      observer.disconnect();
+      const button = document.createElement("ha-icon-button");
+      (button as any).path = mdiCoffeeOutline;
+      (button as any).label = "Donate";
+      button.addEventListener("click", () => {
+        const link = document.createElement("a");
+        link.href = "https://buymeacoffee.com/lovelylain";
+        link.target = "_blank";
+        link.rel = "noreferrer";
+        link.click();
+      });
+      toolbar.appendChild(button);
+    });
+    observer.observe(root, { childList: true });
   }
 }
 
