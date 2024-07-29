@@ -1341,10 +1341,10 @@ class dt extends HTMLElement {
     const u = this.shadowRoot;
     if (u.innerHTML = `<style>${s}</style>${o}`, c) {
       const a = u.querySelector("hass-subpage");
-      a.header = i, this._setProperties = (l) => {
+      this._setButtons(a), a.header = i, this._setProperties = (l) => {
         for (const d of ["hass", "narrow"])
           d in l && (a[d] = l[d]);
-      }, this._setProperties(n), this._setButtons(a);
+      }, this._setProperties(n);
     }
   }
   _setButtons(r) {
