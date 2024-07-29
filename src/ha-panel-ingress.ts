@@ -260,6 +260,7 @@ class HaPanelIngress extends HTMLElement {
     root.innerHTML = `<style>${css}</style>${html}`;
     if (showToolbar) {
       const subpage = root.querySelector("hass-subpage") as any;
+      this._setButtons(subpage);
       subpage.header = title;
       this._setProperties = (props) => {
         for (const k of ["hass", "narrow"]) {
@@ -269,7 +270,6 @@ class HaPanelIngress extends HTMLElement {
         }
       };
       this._setProperties(props);
-      this._setButtons(subpage);
     }
   }
 
