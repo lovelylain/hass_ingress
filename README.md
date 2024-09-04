@@ -59,7 +59,6 @@ ingress:
     headers:
       authorization: !secret nodered_auth
   openwrt:
-    work_mode: ingress
     title: OpenWrt
     icon: mdi:router-wireless-settings
     url: http://192.168.0.1/
