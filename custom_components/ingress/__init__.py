@@ -7,7 +7,7 @@ import time
 import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
-from homeassistant.const import CONF_HEADERS, CONF_ICON, CONF_URL
+from homeassistant.const import CONF_HEADERS, CONF_ICON, CONF_URL, CONF_MODE, CONF_NAME, CONF_PATH
 from homeassistant.components import panel_custom, frontend
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED
 from homeassistant.components.http import HomeAssistantView
@@ -29,14 +29,17 @@ CONF_INGRESS = 'ingress'
 CONF_WORK_MODE = 'work_mode'
 CONF_TOOLBAR = 'toolbar'
 CONF_UI_MODE = 'ui_mode'
+CONF_REWRITE = 'rewrite'
 CONF_COOKIE_NAME = 'cookie_name'
 CONF_EXPIRE_TIME = 'expire_time'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
+CONF_DISABLE_STREAM = 'disable_stream'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
 WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio']
 UI_MODES = ['normal', 'toolbar', 'replace']
+REWRITE_MODES = ['body', 'header']
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: cv.schema_with_slug_keys(vol.Schema({
@@ -55,9 +58,17 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_TOOLBAR): cv.boolean,
         vol.Optional(CONF_UI_MODE): vol.In(UI_MODES),
         vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
+        vol.Optional(CONF_REWRITE, default=[]): [vol.Schema({
+            vol.Required(CONF_MODE): vol.In(REWRITE_MODES),
+            vol.Optional(CONF_PATH, default="/.*"): cv.string,
+            vol.Optional(CONF_NAME): cv.string,
+            vol.Required(CONF_MATCH): cv.string,
+            vol.Required(CONF_REPLACE): cv.string,
+        })],
         vol.Optional(CONF_COOKIE_NAME): cv.string,
         vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
         vol.Optional(CONF_DISABLE_CHUNKED): cv.boolean,
+        vol.Optional(CONF_DISABLE_STREAM): cv.boolean,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -67,6 +78,8 @@ class IngressCfg:
     cookie_names = {}
     expire_time = 3600
     disable_chunked = False
+    disable_stream = False
+    rewrite = []
 
     def __init__(self, **kwargs):
         self.__dict__.update((k,v) for k,v in kwargs.items() if v)
@@ -135,6 +148,8 @@ async def async_setup(hass, config):
                 headers=data.get(CONF_HEADERS),
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
+                rewrite=data.get(CONF_REWRITE),
+                disable_stream=data.get(CONF_DISABLE_STREAM),
             )
             if work_mode != 'auth':
                 ingress_cfg.update(
@@ -359,14 +374,43 @@ class IngressView(HomeAssistantView):
             skip_auto_headers=[hdrs.CONTENT_TYPE],
         ) as result:
             headers = _response_header(result)
+            path = "/" + url.partition("://")[2].partition("/")[2]
+
+            if cfg.rewrite:
+                for name, value in headers.items():
+                    for rewrite in cfg.rewrite:
+                        if rewrite[CONF_MODE] != "header":
+                            continue
+                        if re.match(rewrite[CONF_PATH], path, re.I) is None:
+                            continue
+                        if rewrite[CONF_NAME] and re.match(rewrite[CONF_NAME], name, re.I) is None:
+                            continue
+                        headers[name] = re.sub(
+                            rewrite[CONF_MATCH],
+                            rewrite[CONF_REPLACE],
+                            value,
+                        )
 
             # Simple request
             if (
                 hdrs.CONTENT_LENGTH in result.headers
                 and int(result.headers.get(hdrs.CONTENT_LENGTH, 0)) < 4194000
-            ) or result.status in (204, 304):
+            ) or result.status in (204, 304) or cfg.disable_stream:
                 # Return Response
                 body = await result.read()
+
+                if cfg.rewrite:
+                    for rewrite in cfg.rewrite:
+                        if rewrite[CONF_MODE] != "body":
+                            continue
+                        if re.match(rewrite[CONF_PATH], path, re.I) is None:
+                            continue
+                        body = re.sub(
+                            rewrite[CONF_MATCH].encode(),
+                            rewrite[CONF_REPLACE].encode(),
+                            body,
+                        )
+
                 return web.Response(
                     headers=headers,
                     status=result.status,

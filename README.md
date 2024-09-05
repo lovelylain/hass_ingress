@@ -58,6 +58,31 @@ ingress:
     index: /ui/
     headers:
       authorization: !secret nodered_auth
+  openwrt:
+    title: OpenWrt
+    icon: mdi:router-wireless-settings
+    url: http://192.168.0.1/
+    # "fix" absolute URLs by rewriting the response body
+    # also disable streaming, or it won't work
+    disable_stream: True
+    rewrite:
+      # for HTML response
+      - mode: body
+        match: >-
+          /(luci-static|cgi-bin)/
+        replace: >-
+          /api/ingress/openwrt/\1/
+      # for JS init code
+      - mode: body
+        match: >-
+          \\/(luci-static|cgi-bin|ubus)\\/
+        replace: >-
+          \/api/ingress\/openwrt\/\1\/
+      # for login response
+      - mode: header
+        name: "(Location|Set-Cookie)"
+        match: /cgi-bin/
+        replace: /api/ingress/openwrt/cgi-bin/
 ```
 
 After you modify the Ingress configuration, you can go to `developer-tools` page and click `Reload Ingress` to reload without restarting HA.
@@ -97,8 +122,17 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **index**: string (optional, default empty) The relative URL of index page. If the `url` is http://127.0.0.1:45180/ui/, all access must be under the /ui/ path; if the `url` is http://127.0.0.1:45180 and the `index` is /ui/, all paths of http://127.0.0.1:45180 can be accessed.
     - **parent**: string (optional, default empty) Parent ingress panel name. If non-empty, this panel will be hidden from the HA sidebar and you can access it via the `/{parent panel_name}/{child panel_name}` link. For example, the parent panel `nodered`, the sub-panel `ui` or `nodered_ui`, you can access the sub-panel through `/nodered/ui`.
     - **headers**: map (optional) Additional http headers passed to the backend service, such as `authorization` for `basic auth`.
+    - **rewrite**: list (optional) List of response body/header rewrite rules:
+      - **mode**: string (REQUIRED, oneof `body` `header`) Whether to rewrite response body or headers.
+      - **path**: string (optional) URL prefix to apply this rule to, uses RegEx. E.g. `/.*` for everything.
+      - **name**: string (optional, only with `header`) Header whole name to match, uses RegEx.
+      - **match**: string (REQUIRED) RegEx pattern to search in body or header value.
+      - **replace**: string (REQUIRED) Replacement for the matched RegEx, use `\1`, `\2` to reference capture groups.
     - **expire_time**: integer (optional, default: 3600) Hass ingress generates a token for each panel, which is used to access the panel. This option is used to specify the token validity period.
     - **cookie_name**: string (optional, default: ingress_token) Hass ingress uses cookies to pass tokens, if the cookie name conflicts with the backend service, you can use other value through this option.
     - **disable_chunked**: boolean (optional, default: false) If the backend service does not support chunked encoding, you can disable chunked through this option.
+    - **disable_stream**: boolean (optional, default: false) If `rewrite:` is used, this should be enabled to disable response streaming (required if there is no `Content-Length` on the responses). Use carefully, setting this on e.g. video streaming service will break things.
 
 *Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or  use nginx's sub_filter to fix the absolute paths in the response.*
+
+*Another option is to use body rewrite rules, see the OpenWrt example above.*
