@@ -12,6 +12,7 @@ This guide helps you run Home Assistant and addons(equivalent containers) in a c
   * [MQTT](#mqtt)
   * [VSCode](#vscode)
   * [Node-RED](#node-red)
+  * [Zigbee2MQTT](#zigbee2mqtt)
   * To be continued
 * [Other Services](#other-services)
   * [OpenWrt](#openwrt)
@@ -117,7 +118,8 @@ ingress:
 ### MQTT
 Edit `./docker-compose.yml`, create `./mosquitto/{mosquitto.conf,pw,acl}`, then run `docker-compose up -d`.
 
-Fellow https://github.com/iegomez/mosquitto-go-auth#files for how to create `pw` and `acl` file.
+Refer to https://github.com/iegomez/mosquitto-go-auth#files for how to create `pw` and `acl` file.<br>
+Refer to https://www.home-assistant.io/integrations/mqtt/ for how to configure MQTT in home-assistant.
 
 docker-compose.yml:
 ```yaml
@@ -164,6 +166,8 @@ Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
 
 docker-compose.yml:
 ```yaml
+name: ha
+services:
   vscode:
     image: linuxserver/code-server
     restart: unless-stopped
@@ -191,6 +195,8 @@ Edit `./docker-compose.yml`, then run `docker-compose up -d`, you may need run `
 
 Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
 
+Refer to [node-red-contrib-home-assistant-websocket](https://zachowj.github.io/node-red-contrib-home-assistant-websocket/guide/#generate-access-token) for how to configure Node-RED with home-assistant.
+
 docker-compose.yml:
 ```yaml
 name: ha
@@ -214,6 +220,38 @@ ingress:
     title: Node-RED
     icon: mdi:sitemap
     url: nodered:1880
+```
+
+### Zigbee2MQTT
+Edit `./docker-compose.yml`, then run `docker-compose up -d`.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+Refer to https://www.zigbee2mqtt.io/guide/configuration/ for how to configure Zigbee2MQTT.
+
+docker-compose.yml:
+```yaml
+name: ha
+services:
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt
+    restart: unless-stopped
+    environment:
+    - TZ=Asia/Shanghai
+    volumes:
+    - /run/udev:/run/udev:ro
+    - ./zigbee2mqtt:/app/data
+    devices:
+    - /dev/ttyACM0
+```
+
+configuration.yaml:
+```yaml
+ingress:
+  zigbee2mqtt:
+    title: Zigbee2MQTT
+    icon: mdi:zigbee
+    url: zigbee2mqtt:8080
 ```
 
 ## Other Services
