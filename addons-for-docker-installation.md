@@ -1,0 +1,252 @@
+# Addons for Docker installation
+
+This guide helps you run Home Assistant and addons(equivalent containers) in a container environment without hassio.
+
+## Table of Contents
+
+* [Basic Environment](#basic-environment)
+  * [Network](#network)
+  * [DNS Proxy](#dns-proxy)
+  * [Home Assistant](#home-assistant)
+* [Addons](#addons)
+  * [MQTT](#mqtt)
+  * [VSCode](#vscode)
+  * [Node-RED](#node-red)
+  * To be continued
+* [Other Services](#other-services)
+  * [OpenWrt](#openwrt)
+  * To be continued
+
+## Basic Environment
+
+### Network
+Create `./docker-compose.yml`.
+
+docker-compose.yml:
+```yaml
+name: ha
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: hassio
+    ipam:
+      config:
+      - subnet: 172.30.32.0/23
+        ip_range: 172.30.33.0/24
+        gateway: 172.30.32.1
+```
+
+### DNS Proxy
+
+Edit `./docker-compose.yml`, create `./nginx/dns_proxy.conf`, then run `docker-compose up -d`.
+
+docker-compose.yml:
+```yaml
+name: ha
+services:
+  dns:
+    image: nginx
+    restart: always
+    networks:
+      default:
+        ipv4_address: 172.30.32.3
+    tty: true
+    volumes:
+    - /etc/localtime:/etc/localtime:ro
+    - ./nginx/dns_proxy.conf:/etc/nginx/nginx.conf
+```
+
+dns_proxy.conf:
+```c++
+user  nginx;
+worker_processes  1;
+
+error_log  /var/log/nginx/error.log notice;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+stream {
+  log_format main '$remote_addr [$time_local] "$upstream_addr" $protocol '
+                  '$status $bytes_sent $bytes_received $session_time';
+
+  server {
+    access_log /var/log/nginx/access.log main;
+    listen 53 udp;
+    proxy_pass 127.0.0.11:53;
+    proxy_timeout 10s;
+  }
+}
+```
+
+### Home Assistant
+
+Edit `./docker-compose.yml`, run `docker-compose up -d`.
+Then install [Ingress integration](https://github.com/lovelylain/hass_ingress#install), edit `./homeassistant/configuration.yaml`, run `docker-compose restart homeassistant`.
+
+docker-compose.yml:
+```yaml
+name: ha
+services:
+  homeassistant:
+    image: homeassistant/home-assistant
+    restart: always
+    network_mode: host
+    dns:
+    - 172.30.30.3
+    dns_opt:
+    - ndots:0
+    tty: true
+    environment:
+    - TZ=Asia/Shanghai
+    volumes:
+    - ./homeassistant:/config
+    - ./share:/share
+```
+
+configuration.yaml:
+```yaml
+ingress:
+```
+
+## Addons
+
+### MQTT
+Edit `./docker-compose.yml`, create `./mosquitto/{mosquitto.conf,pw,acl}`, then run `docker-compose up -d`.
+
+Fellow https://github.com/iegomez/mosquitto-go-auth#files for how to create `pw` and `acl` file.
+
+docker-compose.yml:
+```yaml
+name: ha
+services:
+  mqtt:
+    image: iegomez/mosquitto-go-auth
+    restart: always
+    environment:
+    - TZ=Asia/Shanghai
+    volumes:
+    - ./mosquitto:/etc/mosquitto
+```
+
+mosquitto.conf:
+```python
+##
+# defaults
+protocol mqtt
+user mosquitto
+
+##
+# logging
+log_dest stdout
+
+##
+# datastore
+persistence true
+persistence_location /etc/mosquitto/
+
+##
+# User settings
+auth_plugin /mosquitto/go-auth.so
+auth_opt_files_password_path /etc/mosquitto/pw
+auth_opt_files_acl_path /etc/mosquitto/acl
+
+listener 1883
+```
+
+### VSCode
+Edit `./docker-compose.yml`, then run `docker-compose up -d`.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+docker-compose.yml:
+```yaml
+  vscode:
+    image: linuxserver/code-server
+    restart: unless-stopped
+    environment:
+    - TZ=Asia/Shanghai
+    - PUID=0
+    - PGID=0
+    volumes:
+    - ./vscode:/config
+    - .:/data
+```
+
+configuration.yaml:
+```yaml
+ingress:
+  vscode:
+    require_admin: true
+    title: VSCode
+    icon: mdi:microsoft-visual-studio-code
+    url: vscode:8443
+```
+
+### Node-RED
+Edit `./docker-compose.yml`, then run `docker-compose up -d`, you may need run `sudo chown 1000:1000 -R ./node-red`.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+docker-compose.yml:
+```yaml
+name: ha
+services:
+  nodered:
+    image: nodered/node-red
+    restart: unless-stopped
+    tty: true
+    environment:
+    - TZ=Asia/Shanghai
+    volumes:
+    - ./node-red:/data
+    - ./share:/share
+```
+
+configuration.yaml:
+```yaml
+ingress:
+  nodered:
+    require_admin: true
+    title: Node-RED
+    icon: mdi:sitemap
+    url: nodered:1880
+```
+
+## Other Services
+
+### OpenWrt
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+configuration.yaml:
+```yaml
+ingress:
+  openwrt:
+    title: OpenWrt
+    icon: mdi:router-wireless
+    url: 192.168.0.1
+    headers:
+      # auto login for openwrt ingress
+      http-auth-user: !secret openwrt_user
+      http-auth-pass: !secret openwrt_auth
+    # "fix" absolute URLs by rewriting the response body
+    # also disable streaming, or it won't work
+    disable_stream: True
+    rewrite:
+    # for HTML response
+    - mode: body
+      match: /(luci-static|cgi-bin)/
+      replace: $http_x_ingress_path/\1/
+    # for JS init code
+    - mode: body
+      match: \\/(luci-static|cgi-bin|ubus)\\/
+      replace: $http_x_ingress_path\/\1\/
+    # for login response
+    - mode: header
+      name: "(Location|Set-Cookie)"
+      match: /cgi-bin/
+      replace: $http_x_ingress_path/cgi-bin/
+```
