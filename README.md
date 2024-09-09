@@ -62,6 +62,10 @@ ingress:
     title: OpenWrt
     icon: mdi:router-wireless-settings
     url: http://192.168.0.1/
+    headers:
+      # auto login for openwrt ingress
+      http-auth-user: !secret openwrt_user
+      http-auth-pass: !secret openwrt_auth
     # "fix" absolute URLs by rewriting the response body
     # also disable streaming, or it won't work
     disable_stream: True
