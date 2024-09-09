@@ -71,21 +71,21 @@ ingress:
         match: >-
           /(luci-static|cgi-bin)/
         replace: >-
-          /api/ingress/openwrt/\1/
+          $http_x_ingress_path/\1/
       # for JS init code
       - mode: body
         match: >-
           \\/(luci-static|cgi-bin|ubus)\\/
         replace: >-
-          \/api/ingress\/openwrt\/\1\/
+          $http_x_ingress_path\/\1\/
       # for login response
       - mode: header
         name: "(Location|Set-Cookie)"
         match: /cgi-bin/
-        replace: /api/ingress/openwrt/cgi-bin/
+        replace: $http_x_ingress_path/cgi-bin/
 ```
 
-After you modify the Ingress configuration, you can go to `developer-tools` page and click `Reload Ingress` to reload without restarting HA.
+After you modify the Ingress configuration, you can go to `developer-tools` page and click `INGRESS` to reload without restarting HA.
 
 ![reload](images/reload.png)
 
@@ -127,7 +127,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
       - **path**: string (optional) URL prefix to apply this rule to, uses RegEx. E.g. `/.*` for everything.
       - **name**: string (optional, only with `header`) Header whole name to match, uses RegEx.
       - **match**: string (REQUIRED) RegEx pattern to search in body or header value.
-      - **replace**: string (REQUIRED) Replacement for the matched RegEx, use `\1`, `\2` to reference capture groups.
+      - **replace**: string (REQUIRED) Python Replacement for the matched RegEx, use `\1`, `\2` to reference capture groups. `$http_x_ingress_path` in this option will be replaced with `/api/ingress/{name}`.
     - **expire_time**: integer (optional, default: 3600) Hass ingress generates a token for each panel, which is used to access the panel. This option is used to specify the token validity period.
     - **cookie_name**: string (optional, default: ingress_token) Hass ingress uses cookies to pass tokens, if the cookie name conflicts with the backend service, you can use other value through this option.
     - **disable_chunked**: boolean (optional, default: false) If the backend service does not support chunked encoding, you can disable chunked through this option.

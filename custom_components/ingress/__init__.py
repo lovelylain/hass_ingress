@@ -148,11 +148,17 @@ async def async_setup(hass, config):
                 headers=data.get(CONF_HEADERS),
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
-                rewrite=data.get(CONF_REWRITE),
-                disable_stream=data.get(CONF_DISABLE_STREAM),
             )
-            if work_mode != 'auth':
+            if work_mode == 'ingress':
+                rewrite = data.get(CONF_REWRITE)
+                if rewrite:
+                    ingress_path = re.escape(f'{API_BASE}/{name}')
+                    for item in rewrite:
+                        item[CONF_REPLACE] = item[CONF_REPLACE].replace(
+                            '$http_x_ingress_path', ingress_path)
                 ingress_cfg.update(
+                    rewrite=rewrite,
+                    disable_stream=data.get(CONF_DISABLE_STREAM),
                     disable_chunked=data.get(CONF_DISABLE_CHUNKED),
                 )
             ingress_cfg = IngressCfg(**ingress_cfg)
