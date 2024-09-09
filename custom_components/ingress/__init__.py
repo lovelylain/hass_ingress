@@ -8,9 +8,8 @@ import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.const import CONF_HEADERS, CONF_ICON, CONF_URL, CONF_MODE, CONF_NAME, CONF_PATH
-from homeassistant.components import panel_custom, frontend
+from homeassistant.components import panel_custom, frontend, http
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import aiohttp
 from aiohttp import hdrs, web, WSMsgType
@@ -125,6 +124,12 @@ async def _async_setup_reload_service(hass, domain, async_reset, async_setup):
         hass.bus.async_fire(f'event_{domain}_reloaded', context=call.context)
     async_register_admin_service(hass, domain, SERVICE_RELOAD, reload_config)
 
+async def _async_register_static_paths(hass_http, configs):
+    if hasattr(hass_http, 'async_register_static_paths'):
+        await hass_http.async_register_static_paths([http.StaticPathConfig(*c) for c in configs])
+    else:
+        for c in configs: hass_http.register_static_path(*c)
+
 async def async_setup(hass, config):
     now = int(time.time())
     cfgs, panels, children = {}, {}, []
@@ -217,7 +222,9 @@ async def async_setup(hass, config):
         data['config'].update(cfgs)
         data['panels'].update(panels)
     else:
-        hass.http.register_static_path(URL_BASE, os.path.join(__path__[0], 'www'), False)
+        await _async_register_static_paths(hass.http, [
+            (URL_BASE, os.path.join(__path__[0], 'www'), False),
+        ])
         hass.http.register_view(IngressView(hass, cfgs, async_get_clientsession(hass)))
         data.update(config=cfgs, panels=set(panels))
 
@@ -232,7 +239,7 @@ async def async_setup(hass, config):
     return True
 
 
-class IngressView(HomeAssistantView):
+class IngressView(http.HomeAssistantView):
     name = 'api:ingress:proxy'
     url = API_BASE + '/{token}/{path:.*}'
     requires_auth = False
