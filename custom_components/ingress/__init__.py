@@ -3,6 +3,7 @@ import base64
 from ipaddress import ip_address
 import re
 import os
+import json
 import time
 import logging
 import voluptuous as vol
@@ -142,14 +143,12 @@ async def async_setup(hass, config):
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
         if work_mode != 'iframe':
-            if work_mode == 'hassio':
-                url, addon = 'hassio', url
-            else:
+            if work_mode != 'hassio':
                 url = url.rstrip('/')
                 if '://' not in url:
                     url = f'http://{url}'
             ingress_cfg = dict(
-                name=name, url=url, entry=name,
+                mode=work_mode, name=name, url=url, entry=name,
                 headers=data.get(CONF_HEADERS),
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
@@ -172,7 +171,7 @@ async def async_setup(hass, config):
             if work_mode == 'auth':
                 cfg['url'] = front_url
             elif work_mode == 'hassio':
-                cfg['addon'] = addon
+                cfg['addon'] = url
         else:
             cfg = {'url': front_url}
             if data[CONF_INDEX]:
@@ -279,7 +278,7 @@ class IngressView(http.HomeAssistantView):
             return web.Response(headers=cfg.headers)
         # cookie invalid, try redirect to entry
         for cfg in self._config.values():
-            if cfg.name == name and cfg.url != 'hassio':
+            if cfg.name == name and cfg.mode != 'hassio':
                 params = {'replace': ''}
                 root = urlparse(cfg.url + '/').path
                 if url.path.startswith(root):
@@ -288,6 +287,46 @@ class IngressView(http.HomeAssistantView):
                 url = f'{hass_origin}/{cfg.entry}?{urlencode(params)}'
                 raise web.HTTPUnauthorized(headers={'Location': url})
         raise web.HTTPNotFound()
+
+    async def _handle_redirect(self, cfg: IngressCfg, request, path):
+        # find frontend config
+        def get_front_config(hass_data, token, path):
+            def get_config(config):
+                fields = ('url', 'index')
+                config = dict((k,config[k]) for k in fields if k in config)
+                if 'index' in config:
+                    config['index'] = path.lstrip('/')
+                config['ui_mode'] = 'replace'
+                return config
+            for panel in hass_data[DOMAIN]['panels']:
+                panel = hass_data[frontend.DATA_PANELS].get(panel)
+                if not panel: continue
+                if panel.config.get('token') is token:
+                    return get_config(panel.config)
+                for child in panel.config.get('children', {}).values():
+                    if child.get('token') is token:
+                        return get_config(child)
+        config = get_front_config(self._hass.data, cfg.token, path)
+        if not config: return
+
+        # redirect to target url
+        html = """\
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8"/>
+    <script type="module" src="/files/ingress/entrypoint.js"></script>
+    <script>(async () => {
+await customElements.whenDefined("ha-panel-ingress");
+document.querySelector("ha-panel-ingress").setProperties({panel: {
+  config: """ f"{json.dumps(config)}" """,
+}});
+})();</script>
+  </head>
+  <body><ha-panel-ingress></ha-panel-ingress></body>
+</html>
+"""
+        return web.Response(text=html, content_type='text/html')
 
     async def _handle(self, request, token, path):
         if token == '_' and path == 'auth':
@@ -307,10 +346,13 @@ class IngressView(http.HomeAssistantView):
                 if cfg.name == token:
                     if request.query_string:
                         path = f'{path}?{request.query_string}'
+                    if cfg.mode == 'auth':
+                        resp = await self._handle_redirect(cfg, request, path)
+                        if resp is not None: return resp
                     path = urlencode({'replace':'', 'index':path})
                     raise web.HTTPFound(f'/{cfg.entry}?{path}')
             raise web.HTTPNotFound()
-        if cfg.url == 'hassio':
+        if cfg.mode == 'hassio':
             if not path:
                 raise web.HTTPFound(f'/{cfg.entry}?replace')
             url = f"http://{os.environ['SUPERVISOR']}/ingress/{quote(path)}"
@@ -473,7 +515,7 @@ def _init_header(request, cfg, url):
 
     # Set X-Ingress-Path
     ingress_path = f'{API_BASE}/{cfg.name}'
-    if cfg.url == 'hassio':
+    if cfg.mode == 'hassio':
         ingress_path += re.search(r'/ingress(/[^/]+)/', url).group(1)
     headers['X-Ingress-Path'] = ingress_path
 
