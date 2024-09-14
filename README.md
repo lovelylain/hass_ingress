@@ -1,6 +1,7 @@
 # hass_ingress
 
 ![GitHub actions](https://github.com/lovelylain/hass_ingress/actions/workflows/validate.yaml/badge.svg)
+<a href="https://www.buymeacoffee.com/lovelylain" target="_blank"><img alt="Buy Me A Coffee" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" height="20px"></a>
 
 [Addons(equivalent containers) for Docker installation](addons-for-docker-installation.md)
 
@@ -18,7 +19,7 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Hide header on ingress panel pages. (option: `ui_mode: normal`)
 - Show header on ingress panel pages. (option: `ui_mode: toolbar`)
 - Hide ingress panels from sidebar. (option: `parent: parent_panel`)
-- Additional http headers passed to the backend service, such as `authorization` and `host`, so that we can access the external resources without extra login.  (option: `work_mode: ingress` `header: {map}`)
+- Additional http headers passed to the backend service, such as `authorization` and `host`, so that we can access the external resources without extra login. (option: `work_mode: ingress` `header: {map}`)
 - Embed in other pages. (url: `/api/ingress/{name}/`)
 - Passing url parameters. (url: `/{panel}?index={overwrite_index}`)
 - Reload Ingress configuration without restarting HA.
@@ -139,6 +140,6 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **disable_chunked**: boolean (optional, default: false) If the backend service does not support chunked encoding, you can disable chunked through this option.
     - **disable_stream**: boolean (optional, default: false) If `rewrite:` is used, this should be enabled to disable response streaming (required if there is no `Content-Length` on the responses). Use carefully, setting this on e.g. video streaming service will break things.
 
-*Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or  use nginx's sub_filter to fix the absolute paths in the response.*
+_Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or use nginx's sub_filter to fix the absolute paths in the response._
 
-*Another option is to use body rewrite rules, see the OpenWrt example above.*
+_Another option is to use body rewrite rules, see the OpenWrt example above._
