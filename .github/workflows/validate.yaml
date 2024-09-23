@@ -2,9 +2,9 @@ name: Validate
 
 on:
   push:
+    branches-ignore: ['*']
+    tags: ['*']
   pull_request:
-  schedule:
-    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
