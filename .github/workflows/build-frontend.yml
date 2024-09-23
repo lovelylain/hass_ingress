@@ -1,0 +1,50 @@
+name: Build Frontend
+on:
+  push:
+    branches:
+      - frontend
+
+permissions:
+  contents: write
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    env:
+      MAIN_BRANCH: main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Build
+        run: |
+          pnpm install
+          pnpm run build
+
+      - name: Diff
+        id: diff
+        continue-on-error: true
+        run: |
+          git fetch origin $MAIN_BRANCH:main
+          git checkout main
+          mv dist/ha-panel-ingress.js custom_components/ingress/www/entrypoint.js
+          [ -n "$(git diff --stat)" ]
+
+      - name: Commit
+        if: steps.diff.outcome == 'success'
+        run: |
+          git config --global user.email "$(git log -n1 --pretty=format:'%ae')"
+          git config --global user.name "$(git log -n1 --pretty=format:'%an')"
+          git commit -am "update entrypoint.js"
+
+      - name: Push changes
+        if: steps.diff.outcome == 'success'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ env.MAIN_BRANCH }}
