@@ -374,7 +374,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
     put = _handle
     delete = _handle
     patch = _handle
-    options = _handle
+    # options = _handle
 
     async def _handle_websocket(self, request, cfg, url):
         if hdrs.SEC_WEBSOCKET_PROTOCOL in request.headers:
