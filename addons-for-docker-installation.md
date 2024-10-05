@@ -14,6 +14,7 @@ This guide helps you run Home Assistant and addons(equivalent containers) in a c
   - [VSCode](#vscode)
   - [Node-RED](#node-red)
   - [Zigbee2MQTT](#zigbee2mqtt)
+  - [Tandoor Recipes](#tandoor-recipes)
   - To be continued
 - [Other Services](#other-services)
   - [OpenWrt](#openwrt)
@@ -74,7 +75,6 @@ services:
     networks:
       default:
         ipv4_address: 172.30.32.3
-    tty: true
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./nginx/dns_proxy.conf:/etc/nginx/nginx.conf
@@ -87,7 +87,6 @@ services:
       - 172.30.32.3
     dns_opt:
       - ndots:0
-    tty: true
     environment:
       - TZ=Asia/Shanghai
     volumes:
@@ -97,7 +96,6 @@ services:
   nodered:
     image: nodered/node-red
     restart: unless-stopped
-    tty: true
     environment:
       - TZ=Asia/Shanghai
     volumes:
@@ -155,7 +153,6 @@ services:
     networks:
       default:
         ipv4_address: 172.30.32.3
-    tty: true
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./nginx/dns_proxy.conf:/etc/nginx/nginx.conf
@@ -206,7 +203,6 @@ services:
       - 172.30.32.3
     dns_opt:
       - ndots:0
-    tty: true
     environment:
       - TZ=Asia/Shanghai
     volumes:
@@ -320,7 +316,6 @@ services:
   nodered:
     image: nodered/node-red
     restart: unless-stopped
-    tty: true
     environment:
       - TZ=Asia/Shanghai
     volumes:
@@ -372,6 +367,45 @@ ingress:
     title: Zigbee2MQTT
     icon: mdi:zigbee
     url: zigbee2mqtt:8080
+```
+
+### Tandoor Recipes
+
+Edit `./docker-compose.yml`, then run `docker compose up -d`.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+docker-compose.yml:
+
+```yaml
+name: ha
+services:
+  tandoor_recipes:
+    image: vabene1111/recipes
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+      - REMOTE_USER_AUTH=1
+      - SCRIPT_NAME=/api/ingress/tandoor_recipes
+      - JS_REVERSE_SCRIPT_PREFIX=/api/ingress/tandoor_recipes
+      - STATIC_URL=/local/tandoor/static/
+      - MEDIA_URL=/local/tandoor/media/
+    volumes:
+      - ./homeassistant/www/tandoor/static:/opt/recipes/staticfiles
+      - ./homeassistant/www/tandoor/media:/opt/recipes/mediafiles
+```
+
+configuration.yaml:
+
+```yaml
+ingress:
+  tandoor_recipes:
+    title: Tandoor Recipes
+    icon: mdi:silverware-fork-knife
+    url: tandoor_recipes:8080/api/ingress/tandoor_recipes
+    headers:
+      Remote-User: admin
+      X-Script-Name: /api/ingress/tandoor_recipes
 ```
 
 ## Other Services
