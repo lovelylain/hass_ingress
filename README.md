@@ -70,8 +70,6 @@ ingress:
       http-auth-user: !secret openwrt_user
       http-auth-pass: !secret openwrt_auth
     # "fix" absolute URLs by rewriting the response body
-    # also disable streaming, or it won't work
-    disable_stream: True
     rewrite:
       # for HTML response
       - mode: body
@@ -99,7 +97,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **title**: string (REQUIRED) Friendly title for the panel. Will be used in the sidebar.
     - **icon**: [icon](https://www.home-assistant.io/docs/configuration/customizing-devices/#icon) (optional) Icon for entry.
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
-    - **work_mode**: string (oneof `ingress` `iframe` `auth` `hassio`, default: ingress)
+    - **work_mode**: string (oneof `ingress` `subapp` `iframe` `auth` `hassio`, default: ingress)
       - ingress: Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/).
       - iframe: Sidebar function similar to [Webpage dashboard](https://www.home-assistant.io/dashboards/dashboards/#webpage-dashboard).
       - auth: Work with nginx auth_request for backend services can't be proxied by ingress.
@@ -134,7 +132,6 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **expire_time**: integer (optional, default: 3600) Hass ingress generates a token for each panel, which is used to access the panel. This option is used to specify the token validity period.
     - **cookie_name**: string (optional, default: ingress_token) Hass ingress uses cookies to pass tokens, if the cookie name conflicts with the backend service, you can use other value through this option.
     - **disable_chunked**: boolean (optional, default: false) If the backend service does not support chunked encoding, you can disable chunked through this option.
-    - **disable_stream**: boolean (optional, default: false) If `rewrite:` is used, this should be enabled to disable response streaming (required if there is no `Content-Length` on the responses). Use carefully, setting this on e.g. video streaming service will break things.
 
 _Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or use nginx's sub_filter to fix the absolute paths in the response._
 

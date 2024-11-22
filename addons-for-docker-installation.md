@@ -429,8 +429,6 @@ ingress:
       http-auth-user: !secret openwrt_user
       http-auth-pass: !secret openwrt_auth
     # "fix" absolute URLs by rewriting the response body
-    # also disable streaming, or it won't work
-    disable_stream: True
     rewrite:
       # for HTML response
       - mode: body
