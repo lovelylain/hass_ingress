@@ -134,6 +134,7 @@ async def _async_register_static_paths(hass_http, configs):
 async def async_setup(hass, config):
     now = int(time.time())
     cfgs, panels, children = {}, {}, []
+    placeholder = '$http_x_ingress_path'
     for name, data in config.get(DOMAIN, {}).items():
         ingress_cfg = None
         work_mode = data.get(CONF_WORK_MODE)
@@ -143,23 +144,28 @@ async def async_setup(hass, config):
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
         if work_mode != 'iframe':
+            ingress_path = f'{API_BASE}/{name}'
             if work_mode != 'hassio':
-                url = url.rstrip('/')
+                url = url.replace(placeholder, ingress_path).rstrip('/')
                 if '://' not in url:
                     url = f'http://{url}'
+            headers = data.get(CONF_HEADERS)
+            for k, v in (headers or {}).items():
+                v2 = v.replace(placeholder, ingress_path)
+                if v != v2:
+                    headers[k] = v2
             ingress_cfg = dict(
                 mode=work_mode, name=name, url=url, entry=name,
-                headers=data.get(CONF_HEADERS),
+                headers=headers,
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
             )
             if work_mode == 'ingress':
                 rewrite = data.get(CONF_REWRITE)
                 if rewrite:
-                    ingress_path = re.escape(f'{API_BASE}/{name}')
+                    ingress_path = re.escape(ingress_path)
                     for item in rewrite:
-                        item[CONF_REPLACE] = item[CONF_REPLACE].replace(
-                            '$http_x_ingress_path', ingress_path)
+                        item[CONF_REPLACE] = item[CONF_REPLACE].replace(placeholder, ingress_path)
                 ingress_cfg.update(
                     rewrite=rewrite,
                     disable_stream=data.get(CONF_DISABLE_STREAM),
