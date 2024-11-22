@@ -149,11 +149,9 @@ async def async_setup(hass, config):
                 url = url.replace(placeholder, ingress_path).rstrip('/')
                 if '://' not in url:
                     url = f'http://{url}'
-            headers = data.get(CONF_HEADERS)
-            for k, v in (headers or {}).items():
-                v2 = v.replace(placeholder, ingress_path)
-                if v != v2:
-                    headers[k] = v2
+            headers = {}
+            for k, v in data.get(CONF_HEADERS, {}).items():
+                headers[k.title()] = v.replace(placeholder, ingress_path)
             ingress_cfg = dict(
                 mode=work_mode, name=name, url=url, entry=name,
                 headers=headers,
@@ -548,6 +546,10 @@ def _init_header(request, cfg, url):
     if not forward_proto:
         forward_proto = request.url.scheme
     headers[hdrs.X_FORWARDED_PROTO] = forward_proto
+
+    # Replace Origin placeholder
+    if cfg.headers.get('Origin') == '$auto':
+        headers['Origin'] = f'{forward_proto}://{forward_host}'
 
     return headers
 
