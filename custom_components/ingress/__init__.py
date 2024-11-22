@@ -25,15 +25,12 @@ CONF_REPLACE = 'replace'
 CONF_DEFAULT = 'default'
 CONF_INDEX = 'index'
 CONF_PARENT = 'parent'
-CONF_INGRESS = 'ingress'
 CONF_WORK_MODE = 'work_mode'
-CONF_TOOLBAR = 'toolbar'
 CONF_UI_MODE = 'ui_mode'
 CONF_REWRITE = 'rewrite'
 CONF_COOKIE_NAME = 'cookie_name'
 CONF_EXPIRE_TIME = 'expire_time'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
-CONF_DISABLE_STREAM = 'disable_stream'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
@@ -53,10 +50,8 @@ CONFIG_SCHEMA = vol.Schema({
         })),
         vol.Optional(CONF_INDEX, default=''): cv.string,
         vol.Optional(CONF_PARENT): cv.string,
-        vol.Optional(CONF_INGRESS, default=True): cv.boolean,
-        vol.Optional(CONF_WORK_MODE): vol.In(WORK_MODES),
-        vol.Optional(CONF_TOOLBAR): cv.boolean,
-        vol.Optional(CONF_UI_MODE): vol.In(UI_MODES),
+        vol.Optional(CONF_WORK_MODE, default='ingress'): vol.In(WORK_MODES),
+        vol.Optional(CONF_UI_MODE, default='normal'): vol.In(UI_MODES),
         vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
         vol.Optional(CONF_REWRITE, default=[]): [vol.Schema({
             vol.Required(CONF_MODE): vol.In(REWRITE_MODES),
@@ -68,7 +63,6 @@ CONFIG_SCHEMA = vol.Schema({
         vol.Optional(CONF_COOKIE_NAME): cv.string,
         vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
         vol.Optional(CONF_DISABLE_CHUNKED): cv.boolean,
-        vol.Optional(CONF_DISABLE_STREAM): cv.boolean,
     })),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -78,7 +72,6 @@ class IngressCfg:
     cookie_names = {}
     expire_time = 3600
     disable_chunked = False
-    disable_stream = False
     rewrite = []
     sub_apps = []
 
@@ -138,9 +131,7 @@ async def async_setup(hass, config):
     placeholder = '$http_x_ingress_path'
     for name, data in config.get(DOMAIN, {}).items():
         ingress_cfg = None
-        work_mode = data.get(CONF_WORK_MODE)
-        if work_mode is None:
-            work_mode = 'ingress' if data[CONF_INGRESS] else 'iframe'
+        work_mode = data[CONF_WORK_MODE]
         url, front_url = data[CONF_URL], {}
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
@@ -167,7 +158,6 @@ async def async_setup(hass, config):
                         item[CONF_REPLACE] = item[CONF_REPLACE].replace(placeholder, ingress_path)
                 ingress_cfg.update(
                     rewrite=rewrite,
-                    disable_stream=data.get(CONF_DISABLE_STREAM),
                     disable_chunked=data.get(CONF_DISABLE_CHUNKED),
                 )
             ingress_cfg = IngressCfg(**ingress_cfg)
@@ -187,10 +177,7 @@ async def async_setup(hass, config):
         elif 'url' in cfg:
             cfg['url'] = url
 
-        ui_mode = data.get(CONF_UI_MODE)
-        if ui_mode is None:
-            ui_mode = 'toolbar' if data.get(CONF_TOOLBAR) else 'normal'
-        cfg['ui_mode'] = ui_mode
+        cfg['ui_mode'] = data[CONF_UI_MODE]
         title = data.get(CONF_TITLE)
         parent = data.get(CONF_PARENT)
         if parent:
@@ -447,42 +434,43 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
             skip_auto_headers=[hdrs.CONTENT_TYPE],
         ) as result:
             headers = _response_header(result)
-            path = "/" + url.partition("://")[2].partition("/")[2]
 
+            rewrite_body = None
             if cfg.rewrite:
-                for name, value in headers.items():
-                    for rewrite in cfg.rewrite:
-                        if rewrite[CONF_MODE] != "header":
-                            continue
-                        if re.match(rewrite[CONF_PATH], path, re.I) is None:
-                            continue
-                        if rewrite[CONF_NAME] and re.match(rewrite[CONF_NAME], name, re.I) is None:
-                            continue
-                        headers[name] = re.sub(
-                            rewrite[CONF_MATCH],
-                            rewrite[CONF_REPLACE],
-                            value,
-                        )
+                def make_rewrite(rewrite, rewrite_body):
+                    if rewrite_body is None:
+                        rewrite_body = lambda body: body
+                    return lambda body: re.sub(
+                        rewrite[CONF_MATCH].encode(),
+                        rewrite[CONF_REPLACE].encode(),
+                        rewrite_body(body),
+                    )
+
+                path = "/" + url.partition("://")[2].partition("/")[2]
+                for rewrite in cfg.rewrite:
+                    if re.match(rewrite[CONF_PATH], path, re.I) is None:
+                        continue
+                    if rewrite[CONF_MODE] == "header":
+                        for name, value in headers.items():
+                            if rewrite[CONF_NAME] and re.match(rewrite[CONF_NAME], name, re.I) is None:
+                                continue
+                            headers[name] = re.sub(
+                                rewrite[CONF_MATCH],
+                                rewrite[CONF_REPLACE],
+                                value,
+                            )
+                    elif rewrite[CONF_MODE] == "body":
+                        rewrite_body = make_rewrite(rewrite, rewrite_body)
 
             # Simple request
             if (
                 hdrs.CONTENT_LENGTH in result.headers
                 and int(result.headers.get(hdrs.CONTENT_LENGTH, 0)) < 4194000
-            ) or result.status in (204, 304) or cfg.disable_stream:
+            ) or result.status in (204, 304) or rewrite_body:
                 # Return Response
                 body = await result.read()
-
-                if cfg.rewrite:
-                    for rewrite in cfg.rewrite:
-                        if rewrite[CONF_MODE] != "body":
-                            continue
-                        if re.match(rewrite[CONF_PATH], path, re.I) is None:
-                            continue
-                        body = re.sub(
-                            rewrite[CONF_MATCH].encode(),
-                            rewrite[CONF_REPLACE].encode(),
-                            body,
-                        )
+                if rewrite_body:
+                    body = rewrite_body(body)
 
                 return web.Response(
                     headers=headers,
