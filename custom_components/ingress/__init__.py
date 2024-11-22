@@ -37,7 +37,7 @@ CONF_DISABLE_STREAM = 'disable_stream'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
-WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio']
+WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio', 'subapp']
 UI_MODES = ['normal', 'toolbar', 'replace']
 REWRITE_MODES = ['body', 'header']
 
@@ -80,6 +80,7 @@ class IngressCfg:
     disable_chunked = False
     disable_stream = False
     rewrite = []
+    sub_apps = []
 
     def __init__(self, **kwargs):
         self.__dict__.update((k,v) for k,v in kwargs.items() if v)
@@ -158,7 +159,7 @@ async def async_setup(hass, config):
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
             )
-            if work_mode == 'ingress':
+            if work_mode in ('ingress', 'subapp'):
                 rewrite = data.get(CONF_REWRITE)
                 if rewrite:
                     ingress_path = re.escape(ingress_path)
@@ -198,7 +199,7 @@ async def async_setup(hass, config):
             if ingress_cfg:
                 ingress_cfg.entry = f'{parent}/{name}'
             if title: cfg['title'] = title
-            children.append((name, parent, cfg))
+            children.append((name, parent, cfg, work_mode))
             continue
 
         panels[name] = dict(
@@ -212,11 +213,19 @@ async def async_setup(hass, config):
             config = cfg,
         )
 
-    for child, parent, cfg in children:
+    for child, parent, cfg, work_mode in children:
         if parent not in panels:
             _LOGGER.error('parent panel[%s] not found, skip child panel[%s]!', parent, child)
             continue
-        panels[parent]['config'].setdefault('children', {})[child] = cfg
+        # panel: add child to parent's children
+        pl_cfg = panels[parent]['config']
+        pl_cfg.setdefault('children', {})[child] = cfg
+        # ingress: add subapp to parent's sub_apps
+        if work_mode == 'subapp' and 'token' in pl_cfg:
+            ingress_cfg = cfgs[pl_cfg['token']['value']]
+            if not ingress_cfg.sub_apps:
+                ingress_cfg.sub_apps = []
+            ingress_cfg.sub_apps.append(cfgs[cfg['token']['value']])
 
     await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
 
@@ -341,7 +350,12 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
             if request.query_string:
                 path = f'{path}?{request.query_string}'
             resp = web.HTTPFound(url + path)
+            # set self cookie
             resp.set_cookie(cfg.cookie_name, token, path=url, httponly=True)
+            # set subapp's cookies
+            for cfg in cfg.sub_apps:
+                resp.headers.add('Set-Cookie', f'{cfg.cookie_name}={cfg.token["value"]};'
+                                 f' HttpOnly; Path={API_BASE}/{cfg.name}/')
             raise resp
         cfg = get_cfg_by_cookie(request, self._config, token)
         if not cfg:
