@@ -388,11 +388,8 @@ services:
       - REMOTE_USER_AUTH=1
       - SCRIPT_NAME=/api/ingress/tandoor_recipes
       - JS_REVERSE_SCRIPT_PREFIX=/api/ingress/tandoor_recipes
-      - STATIC_URL=/local/tandoor/static/
-      - MEDIA_URL=/local/tandoor/media/
-    volumes:
-      - ./homeassistant/www/tandoor/static:/opt/recipes/staticfiles
-      - ./homeassistant/www/tandoor/media:/opt/recipes/mediafiles
+      - STATIC_URL=/api/ingress/tandoor_recipes_static/static/
+      - MEDIA_URL=/api/ingress/tandoor_recipes_static/media/
 ```
 
 configuration.yaml:
@@ -402,10 +399,15 @@ ingress:
   tandoor_recipes:
     title: Tandoor Recipes
     icon: mdi:silverware-fork-knife
-    url: tandoor_recipes:8080/api/ingress/tandoor_recipes
+    url: tandoor_recipes:8080$http_x_ingress_path
     headers:
       Remote-User: admin
-      X-Script-Name: /api/ingress/tandoor_recipes
+      X-Script-Name: $http_x_ingress_path
+      Origin: $auto
+  tandoor_recipes_static:
+    parent: tandoor_recipes
+    work_mode: subapp
+    url: tandoor_recipes:8080/api/ingress/tandoor_recipes$http_x_ingress_path
 ```
 
 ## Other Services

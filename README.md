@@ -75,16 +75,12 @@ ingress:
     rewrite:
       # for HTML response
       - mode: body
-        match: >-
-          /(luci-static|cgi-bin)/
-        replace: >-
-          $http_x_ingress_path/\1/
+        match: /(luci-static|cgi-bin)/
+        replace: $http_x_ingress_path/\1/
       # for JS init code
       - mode: body
-        match: >-
-          \\/(luci-static|cgi-bin|ubus)\\/
-        replace: >-
-          $http_x_ingress_path\/\1\/
+        match: \\/(luci-static|cgi-bin|ubus)\\/
+        replace: $http_x_ingress_path\/\1\/
       # for login response
       - mode: header
         name: "(Location|Set-Cookie)"
