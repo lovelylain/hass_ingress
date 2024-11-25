@@ -517,7 +517,8 @@ def _init_header(request, cfg, url):
             if not value: continue
         headers[name] = value
     for name, value in cfg.headers.items():
-        headers[name] = value
+        if value != '$auto':
+            headers[name] = value
 
     # Set X-Ingress-Path
     ingress_path = f'{API_BASE}/{cfg.name}'
@@ -550,7 +551,7 @@ def _init_header(request, cfg, url):
     headers[hdrs.X_FORWARDED_PROTO] = forward_proto
 
     # Replace Origin placeholder
-    if cfg.headers.get('Origin') == '$auto':
+    if 'Origin' in headers and cfg.headers.get('Origin') == '$auto':
         headers['Origin'] = f'{forward_proto}://{forward_host}'
 
     return headers

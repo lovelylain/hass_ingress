@@ -404,10 +404,20 @@ ingress:
       Remote-User: admin
       X-Script-Name: $http_x_ingress_path
       Origin: $auto
+    rewrite:
+      - mode: body
+        path: /api/ingress/\w+/\w+/$
+        match: (href=".*/api/ingress/\w+)"
+        replace: \1/"
   tandoor_recipes_static:
     parent: tandoor_recipes
     work_mode: subapp
     url: tandoor_recipes:8080/api/ingress/tandoor_recipes$http_x_ingress_path
+    rewrite:
+      - mode: body
+        path: /api/ingress/.*/static/themes/tandoor\.min\.css$
+        match: (url\()/(static)/
+        replace: \1$http_x_ingress_path/\2/
 ```
 
 ## Other Services
