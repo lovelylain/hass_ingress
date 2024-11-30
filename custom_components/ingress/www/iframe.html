@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+  </head>
+  <body>
+    <iframe frameborder="0" style="width: 100%; height: 100%" allow="fullscreen"></iframe>
+    <script>
+      (() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        let url = urlParams.get("ingress");
+        if (!url) {
+          const html = `<p>Usage: ${window.location.pathname}?ingress=frigate&refresh=600</p>`;
+          document.getElementsByTagName("body")[0].innerHTML = html;
+          return;
+        }
+        url = `/api/ingress/${url}${url.indexOf("/") === -1 ? "/" : ""}`;
+        const iframe = document.getElementsByTagName("iframe")[0];
+        iframe.style.height = document.documentElement.clientHeight - 10 + "px";
+        iframe.src = url;
+        const interval = +urlParams.get("refresh");
+        if (interval >= 5) {
+          setInterval(() => {
+            iframe.src = url;
+          }, interval * 1000);
+        }
+      })();
+    </script>
+  </body>
+</html>
