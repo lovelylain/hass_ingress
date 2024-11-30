@@ -127,7 +127,7 @@ async def _async_register_static_paths(hass_http, configs):
 
 async def async_setup(hass, config):
     now = int(time.time())
-    cfgs, panels, children = {}, {}, []
+    cfgs, panels, ingresses, children = {}, {}, {}, []
     placeholder = '$http_x_ingress_path'
     for name, data in config.get(DOMAIN, {}).items():
         ingress_cfg = None
@@ -167,6 +167,8 @@ async def async_setup(hass, config):
                 cfg['url'] = front_url
             elif work_mode == 'hassio':
                 cfg['addon'] = url
+            elif work_mode == 'ingress':
+                ingresses[name] = ingress_cfg
         else:
             cfg = {'url': front_url}
             if data[CONF_INDEX]:
@@ -186,7 +188,7 @@ async def async_setup(hass, config):
             if ingress_cfg:
                 ingress_cfg.entry = f'{parent}/{name}'
             if title: cfg['title'] = title
-            children.append((name, parent, cfg, work_mode))
+            children.append((name, parent, cfg, ingress_cfg))
             continue
 
         panels[name] = dict(
@@ -200,19 +202,27 @@ async def async_setup(hass, config):
             config = cfg,
         )
 
-    for child, parent, cfg, work_mode in children:
+    for child, parent, cfg, ingress_cfg in children:
+        if ingress_cfg and ingress_cfg.mode == 'subapp':
+            if parent not in ingresses:
+                _LOGGER.error('parent ingress[%s] not found, skip subapp[%s]!',
+                    parent, ingress_cfg.name)
+                continue
+            # ingress: add subapp to parent's sub_apps
+            pi_cfg = ingresses[parent]
+            if not pi_cfg.sub_apps:
+                pi_cfg.sub_apps = []
+            pi_cfg.sub_apps.append(ingress_cfg)
+            # panel: use parent's parent if parent is a child panel
+            if parent not in panels:
+                parent = pi_cfg.entry.partition('/')
+                parent, child = parent[0], f'{parent[2]}-{child}'
+                ingress_cfg.entry = f'{parent}/{child}'
         if parent not in panels:
             _LOGGER.error('parent panel[%s] not found, skip child panel[%s]!', parent, child)
             continue
         # panel: add child to parent's children
-        pl_cfg = panels[parent]['config']
-        pl_cfg.setdefault('children', {})[child] = cfg
-        # ingress: add subapp to parent's sub_apps
-        if work_mode == 'subapp' and 'token' in pl_cfg:
-            ingress_cfg = cfgs[pl_cfg['token']['value']]
-            if not ingress_cfg.sub_apps:
-                ingress_cfg.sub_apps = []
-            ingress_cfg.sub_apps.append(cfgs[cfg['token']['value']])
+        panels[parent]['config'].setdefault('children', {})[child] = cfg
 
     await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
 
@@ -278,7 +288,7 @@ class IngressView(http.HomeAssistantView):
             return web.Response(headers=cfg.headers)
         # cookie invalid, try redirect to entry
         for cfg in self._config.values():
-            if cfg.name == name and cfg.mode != 'hassio':
+            if cfg.name == name:
                 params = {'replace': ''}
                 root = urlparse(cfg.url + '/').path
                 if url.path.startswith(root):
@@ -345,9 +355,9 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
                                  f' HttpOnly; Path={API_BASE}/{cfg.name}/')
             raise resp
         cfg = get_cfg_by_cookie(request, self._config, token)
-        if not cfg:
+        if not cfg or cfg.mode == 'hassio':
             # cookie invalid, try redirect to entry
-            for cfg in self._config.values():
+            for cfg in ([cfg] if cfg else self._config.values()):
                 if cfg.name == token:
                     if request.query_string:
                         path = f'{path}?{request.query_string}'
@@ -357,12 +367,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
                     path = urlencode({'replace':'', 'index':path})
                     raise web.HTTPFound(f'/{cfg.entry}?{path}')
             raise web.HTTPNotFound()
-        if cfg.mode == 'hassio':
-            if not path:
-                raise web.HTTPFound(f'/{cfg.entry}?replace')
-            url = f"http://{os.environ['SUPERVISOR']}/ingress/{quote(path)}"
-        else:
-            url = f'{cfg.url}/{path}'
+        url = f'{cfg.url}/{path}'
 
         try:
             # Websocket
@@ -521,10 +526,7 @@ def _init_header(request, cfg, url):
             headers[name] = value
 
     # Set X-Ingress-Path
-    ingress_path = f'{API_BASE}/{cfg.name}'
-    if cfg.mode == 'hassio':
-        ingress_path += re.search(r'/ingress(/[^/]+)/', url).group(1)
-    headers['X-Ingress-Path'] = ingress_path
+    headers['X-Ingress-Path'] = f'{API_BASE}/{cfg.name}'
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)
