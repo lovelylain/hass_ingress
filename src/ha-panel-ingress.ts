@@ -5,57 +5,15 @@ import {
   navigate,
   ensureHaPanel,
 } from "./ha-interfaces";
+import { fetchHassioAddonInfo, hassioSession } from "./hassio-ingress";
 import { enableSidebarSwipe } from "./hass-sidebar-swipe";
 import { mdiCoffeeOutline } from "@mdi/js";
 
 // hassio addon ingress
-interface HassioAddonDetails {
-  ingress_url: string | null;
-}
-
-const fetchHassioAddonInfo = async (
-  hass: HomeAssistant,
-  addonSlug: string
-): Promise<HassioAddonDetails | null> => {
-  let addon: HassioAddonDetails | null = null;
-  try {
-    addon = await hass.callWS({
-      type: "supervisor/api",
-      endpoint: `/addons/${addonSlug}/info`,
-      method: "get",
-    });
-  } catch (err) {}
-  return addon;
-};
-
-const createHassioSession = async (hass: HomeAssistant): Promise<string> => {
-  const resp: { session: string } = await hass.callWS({
-    type: "supervisor/api",
-    endpoint: "/ingress/session",
-    method: "post",
-  });
-  const session = resp.session;
-  // document.cookie = `ingress_session=${session};path=/api/ingress/;SameSite=Strict${
-  document.cookie = `ingress_session=${session};path=/api/hassio_ingress/;SameSite=Strict${
-    location.protocol === "https:" ? ";Secure" : ""
-  }`;
-  return session;
-};
-
-const validateHassioSession = async (hass: HomeAssistant, session: string) => {
-  await hass.callWS({
-    type: "supervisor/api",
-    endpoint: "/ingress/validate_session",
-    method: "post",
-    data: { session },
-  });
-};
-
 const getHassioAddonUrl = async (
   elem: HTMLElement,
   hass: HomeAssistant,
-  addonSlug: string,
-  _baseUrl: string
+  addonSlug: string
 ): Promise<string | undefined> => {
   const showError = (msg: string): undefined => {
     (elem.shadowRoot || elem).innerHTML = `<pre>${msg}</pre>`;
@@ -68,27 +26,11 @@ const getHassioAddonUrl = async (
   if (!addon.ingress_url) {
     return showError(`Add-on '${addonSlug}' does not support Ingress`);
   }
-  // const targetUrl = baseUrl + addon.ingress_url.replace(/^\/api\/hassio_ingress(\/[^/]+).*/, "$1");
   const targetUrl = addon.ingress_url.replace(/\/+$/, "");
 
-  let session: string;
-  const obj = elem as { _sessionKeepAlive?: number };
-  if (obj._sessionKeepAlive) {
-    clearInterval(obj._sessionKeepAlive);
-  }
-  try {
-    session = await createHassioSession(hass);
-  } catch (err) {
+  if (!(await hassioSession.init(hass))) {
     return showError(`Unable to create an Ingress session`);
   }
-  obj._sessionKeepAlive = window.setInterval(async () => {
-    try {
-      await validateHassioSession(hass, session);
-    } catch (err) {
-      session = await createHassioSession(hass);
-    }
-  }, 60000);
-
   return targetUrl;
 };
 
@@ -112,10 +54,17 @@ interface IngressPanelConfig {
 class HaPanelIngress extends HTMLElement {
   private _setProperties?: (props: CustomPanelProperties) => void;
   private _panelPath: string = "";
+  private _isHassio?: boolean;
 
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+  }
+
+  public disconnectedCallback() {
+    if (this._isHassio) {
+      hassioSession.fini();
+    }
   }
 
   async setProperties(props: CustomPanelProperties) {
@@ -181,7 +130,7 @@ class HaPanelIngress extends HTMLElement {
     } else if (isIngress) {
       targetUrl = `/api/ingress/${config.token!.value}`;
       if (addonSlug) {
-        const url = await getHassioAddonUrl(this, props.hass!, addonSlug, targetUrl);
+        const url = await getHassioAddonUrl(this, props.hass!, addonSlug);
         if (!url) {
           return;
         }
@@ -189,6 +138,14 @@ class HaPanelIngress extends HTMLElement {
       }
     } else {
       targetUrl = urlInfo;
+    }
+
+    if (this._isHassio) {
+      hassioSession.fini();
+      delete this._isHassio;
+    }
+    if (addonSlug) {
+      this._isHassio = true;
     }
 
     let { index } = config;
