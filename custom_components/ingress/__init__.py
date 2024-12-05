@@ -355,7 +355,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
                                  f' HttpOnly; Path={API_BASE}/{cfg.name}/')
             raise resp
         cfg = get_cfg_by_cookie(request, self._config, token)
-        if not cfg or cfg.mode == 'hassio':
+        if not cfg or cfg.mode not in ('ingress', 'subapp'):
             # cookie invalid, try redirect to entry
             for cfg in ([cfg] if cfg else self._config.values()):
                 if cfg.name == token:
