@@ -42,10 +42,10 @@ const validateHassioSession = async (hass: HomeAssistant, session: string) => {
   });
 };
 
-// hassio session manager
+// hassio ingress session manager
 declare global {
   interface Window {
-    __hassioSession: {
+    __ingressSession: {
       session: string;
       refCount: number;
       init: (hass: HomeAssistant) => Promise<boolean>;
@@ -54,8 +54,8 @@ declare global {
   }
 }
 
-export let hassioSession = window.__hassioSession;
-if (!hassioSession) {
+export let ingressSession = window.__ingressSession;
+if (!ingressSession) {
   const resetState = (): {
     session: string;
     refCount: number;
@@ -67,7 +67,7 @@ if (!hassioSession) {
   });
   let state = resetState();
 
-  hassioSession = window.__hassioSession = {
+  ingressSession = window.__ingressSession = {
     get session(): string {
       return state.session;
     },

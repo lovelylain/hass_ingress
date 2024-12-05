@@ -5,7 +5,7 @@ import {
   navigate,
   ensureHaPanel,
 } from "./ha-interfaces";
-import { fetchHassioAddonInfo, hassioSession } from "./hassio-ingress";
+import { fetchHassioAddonInfo, ingressSession } from "./hassio-ingress";
 import { enableSidebarSwipe } from "./hass-sidebar-swipe";
 import { mdiCoffeeOutline } from "@mdi/js";
 
@@ -28,7 +28,7 @@ const getHassioAddonUrl = async (
   }
   const targetUrl = addon.ingress_url.replace(/\/+$/, "");
 
-  if (!(await hassioSession.init(hass))) {
+  if (!(await ingressSession.init(hass))) {
     return showError(`Unable to create an Ingress session`);
   }
   return targetUrl;
@@ -63,7 +63,7 @@ class HaPanelIngress extends HTMLElement {
 
   public disconnectedCallback() {
     if (this._isHassio) {
-      hassioSession.fini();
+      ingressSession.fini();
     }
   }
 
@@ -141,7 +141,7 @@ class HaPanelIngress extends HTMLElement {
     }
 
     if (this._isHassio) {
-      hassioSession.fini();
+      ingressSession.fini();
       delete this._isHassio;
     }
     if (addonSlug) {
