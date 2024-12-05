@@ -3,30 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Home Assistant Sidebar Swipe Demo</title>
+    <title>Home Assistant Demo</title>
     <script type="module" src="/src/main.ts"></script>
     <style>
       body {
         margin: 0;
         overflow: hidden;
       }
-      home-assistant-main {
-        display: block;
+      ha-drawer {
+        display: flex;
         height: 100vh;
       }
       ha-sidebar {
-        position: absolute;
-        z-index: 1;
-        top: 0;
-        display: block;
-        height: 100vh;
-        width: 33%;
+        width: 55px;
         background-color: #ccc;
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
       }
       ha-sidebar[open] {
-        transform: translateX(0);
+        width: 255px;
+      }
+      partial-panel-resolver {
+        flex-grow: 1;
+      }
+      iframe {
+        border: 0;
+        height: 100%;
+        width: 100%;
       }
       #menu {
         cursor: pointer;
@@ -40,7 +41,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        color: #fff;
+        color: #666;
         background-color: transparent;
       }
       .start-threshold {
@@ -48,7 +49,7 @@
         left: 0;
         top: 0;
         height: 100%;
-        width: 10%;
+        width: 55px;
         background-color: rgba(20, 188, 188);
         writing-mode: vertical-rl;
         text-align: center;
@@ -56,7 +57,7 @@
       }
       .end-threshold {
         position: absolute;
-        left: 13%;
+        left: 60px;
         top: 0;
         height: 100%;
         writing-mode: vertical-rl;
@@ -68,11 +69,12 @@
   <body>
     <home-assistant>
       <home-assistant-main>
-        <button id="menu">☰</button>
-        <div class="start-threshold">Start Threshold</div>
-        <div class="end-threshold">End Threshold</div>
         <ha-drawer>
-          <ha-sidebar></ha-sidebar>
+          <ha-sidebar>
+            <button id="menu">☰</button>
+            <div class="start-threshold">Start Threshold</div>
+            <div class="end-threshold">End Threshold</div>
+          </ha-sidebar>
           <partial-panel-resolver>
             <ha-panel-custom>
               <ha-panel-ingress></ha-panel-ingress>
@@ -94,7 +96,7 @@
 
       document.getElementById("menu").addEventListener("click", (event) => {
         event.stopPropagation();
-        document.querySelector("ha-sidebar").setAttribute("open", true);
+        document.querySelector("ha-sidebar").toggleAttribute("open");
       });
 
       (async () => {
