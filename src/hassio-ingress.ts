@@ -20,17 +20,20 @@ export const fetchHassioAddonInfo = async (
   return addon;
 };
 
+const setIngressCookie = (session: string): string => {
+  document.cookie = `ingress_session=${session};path=/api/hassio_ingress/;SameSite=Strict${
+    location.protocol === "https:" ? ";Secure" : ""
+  }`;
+  return session;
+};
+
 const createHassioSession = async (hass: HomeAssistant): Promise<string> => {
   const resp: { session: string } = await hass.callWS({
     type: "supervisor/api",
     endpoint: "/ingress/session",
     method: "post",
   });
-  const session = resp.session;
-  document.cookie = `ingress_session=${session};path=/api/hassio_ingress/;SameSite=Strict${
-    location.protocol === "https:" ? ";Secure" : ""
-  }`;
-  return session;
+  return setIngressCookie(resp.session);
 };
 
 const validateHassioSession = async (hass: HomeAssistant, session: string) => {
@@ -40,6 +43,7 @@ const validateHassioSession = async (hass: HomeAssistant, session: string) => {
     method: "post",
     data: { session },
   });
+  setIngressCookie(session);
 };
 
 // hassio ingress session manager
