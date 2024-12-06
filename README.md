@@ -3,7 +3,7 @@
 ![GitHub actions](https://github.com/lovelylain/hass_ingress/actions/workflows/validate.yaml/badge.svg)
 <a href="https://www.buymeacoffee.com/lovelylain" target="_blank"><img alt="Buy Me A Coffee" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" height="20px"></a>
 
-[Addons(equivalent containers) for Docker installation](addons-for-docker-installation.md)
+[Addons\(equivalent containers\) for Docker installation](addons-for-docker-installation.md)
 
 Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/), `hass_ingress` extracts this feature into a standalone integration, it allows you to add additional ingress panels to your Home Assistant frontend. The panels are listed in the sidebar and can contain external resources like the web frontend of your router, your monitoring system, or your media server. Home Assistant will take care of the authentication and the secure connection, so users can access the external resources without extra login.
 
@@ -25,9 +25,26 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Reload Ingress configuration without restarting HA.
 - Toggle Home Assistant sidebar via swipe gestures(code from [hass-sidebar-swipe](https://github.com/breakthestatic/hass-sidebar-swipe)).
 
-## Install
+## Installation
 
-You can install this custom component by adding this repository (https://github.com/lovelylain/hass_ingress) to HACS in the settings menu of HACS first. You will find the custom component in the integration menu afterwards, look for `Ingress`. Alternatively, you can install it manually by copying the custom_component folder to your Home Assistant configuration folder.
+### HACS
+
+Use this link to directly go to the repository in HACS
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=lovelylain&repository=hass_ingress)
+
+_or_
+
+1. Install HACS if you don't have it already
+1. Open HACS in Home Assistant
+1. Add custom repository https://github.com/lovelylain/hass_ingress
+1. Search for `Ingress` integration
+1. Click the download button ⬇️
+
+### Manual
+
+1. Download the [latest release](https://github.com/lovelylain/hass_ingress/releases/latest) and unzip.
+2. Put the `custom_components/ingress` folder into your `config/custom_components` folder.
 
 ## Configuration
 
