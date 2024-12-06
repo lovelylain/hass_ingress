@@ -54,14 +54,23 @@ interface IngressPanelConfig {
 class HaPanelIngress extends HTMLElement {
   private _setProperties?: (props: CustomPanelProperties) => void;
   private _panelPath: string = "";
-  private _isHassio?: boolean;
+  private _isHassio?: HomeAssistant;
+  private _disconnected? = true;
 
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
   }
 
+  public connectedCallback() {
+    delete this._disconnected;
+    if (this._isHassio) {
+      ingressSession.init(this._isHassio);
+    }
+  }
+
   public disconnectedCallback() {
+    this._disconnected = true;
     if (this._isHassio) {
       ingressSession.fini();
     }
@@ -145,7 +154,10 @@ class HaPanelIngress extends HTMLElement {
       delete this._isHassio;
     }
     if (addonSlug) {
-      this._isHassio = true;
+      this._isHassio = props.hass;
+      if (this._disconnected) {
+        ingressSession.fini();
+      }
     }
 
     let { index } = config;

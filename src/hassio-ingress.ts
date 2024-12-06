@@ -7,13 +7,13 @@ interface HassioAddonDetails {
 
 export const fetchHassioAddonInfo = async (
   hass: HomeAssistant,
-  addonSlug: string
+  slug: string
 ): Promise<HassioAddonDetails | null> => {
   let addon: HassioAddonDetails | null = null;
   try {
     addon = await hass.callWS({
       type: "supervisor/api",
-      endpoint: `/addons/${addonSlug}/info`,
+      endpoint: `/addons/${slug}/info`,
       method: "get",
     });
   } catch (err) {}
@@ -61,6 +61,7 @@ if (!ingressSession) {
     refCount: number;
     hass?: HomeAssistant;
     timer?: number;
+    finiTimer?: number;
   } => ({
     session: "",
     refCount: 0,
@@ -79,33 +80,39 @@ if (!ingressSession) {
     async init(hass: HomeAssistant): Promise<boolean> {
       if (!hass) return false;
       state.hass = hass;
-      if (state.timer !== undefined) {
-        ++state.refCount;
-      } else {
+      if (state.timer === undefined) {
         try {
           state.session = await createHassioSession(hass);
         } catch (err) {
           return false;
         }
-        state.timer = window.setInterval(async () => {
-          const hass = state.hass as HomeAssistant;
-          try {
-            await validateHassioSession(hass, state.session);
-          } catch (err) {
-            state.session = await createHassioSession(hass);
-          }
-        }, 60000);
-        state.refCount = 1;
+        if (state.timer === undefined) {
+          state.timer = setInterval(async () => {
+            const hass = state.hass as HomeAssistant;
+            try {
+              await validateHassioSession(hass, state.session);
+            } catch (err) {
+              state.session = await createHassioSession(hass);
+            }
+          }, 60000);
+          state.refCount = 0;
+        }
       }
+      ++state.refCount;
       return true;
     },
 
     fini() {
       if (state.timer !== undefined) {
-        if (--state.refCount <= 0) {
-          clearInterval(state.timer);
-          state = resetState();
-        }
+        --state.refCount;
+        clearTimeout(state.finiTimer);
+        state.finiTimer = setTimeout(() => {
+          delete state.finiTimer;
+          if (state.refCount <= 0 && state.timer !== undefined) {
+            clearInterval(state.timer);
+            state = resetState();
+          }
+        }, 60000);
       }
     },
   };
