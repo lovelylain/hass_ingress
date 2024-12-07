@@ -16,25 +16,20 @@
     </style>
   </head>
   <body>
-    <iframe allow="fullscreen"></iframe>
     <script>
       (() => {
         const urlParams = new URLSearchParams(window.location.search);
-        let url = urlParams.get("ingress");
-        if (!url) {
-          const html = `<p>Usage: ${window.location.pathname}?ingress=frigate&refresh=600</p>`;
-          document.getElementsByTagName("body")[0].innerHTML = html;
+        const url = urlParams.get("ingress");
+        if (!/^\/api\/hassio_ingress\/[^/]+/.test(url)) {
           return;
         }
-        url = `/api/ingress/${url}${url.indexOf("/") === -1 ? "/" : ""}`;
-        const iframe = document.getElementsByTagName("iframe")[0];
-        iframe.src = url;
-        const interval = +urlParams.get("refresh");
-        if (interval >= 5) {
-          setInterval(() => {
-            iframe.src = url;
-          }, interval * 1000);
-        }
+        document.querySelector("body").innerHTML = '<iframe allow="fullscreen"></iframe>';
+        document.querySelector("iframe").src = url;
+        let interval = +urlParams.get("refresh");
+        if (!(interval >= 5)) interval = 300;
+        setInterval(() => {
+          fetch(url, { redirect: "manual" });
+        }, interval * 1000);
       })();
     </script>
   </body>
