@@ -175,6 +175,9 @@ class HaPanelIngress extends HTMLElement {
     }
 
     if (urlParams.has("replace")) {
+      if (addonSlug) {
+        targetUrl = `/files/ingress/iframe.html?ingress=${encodeURIComponent(targetUrl)}`;
+      }
       window.location.href = targetUrl;
     } else if (config.ui_mode === "replace") {
       if (targetUrl.indexOf("://") !== -1) {
