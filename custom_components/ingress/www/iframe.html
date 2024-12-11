@@ -19,17 +19,25 @@
     <script>
       (() => {
         const urlParams = new URLSearchParams(window.location.search);
-        const url = urlParams.get("ingress");
-        if (!/^\/api\/hassio_ingress\/[^/]+/.test(url)) {
-          return;
-        }
-        document.querySelector("body").innerHTML = '<iframe allow="fullscreen"></iframe>';
-        document.querySelector("iframe").src = url;
+        let url = urlParams.get("ingress");
         let interval = +urlParams.get("refresh");
-        if (!(interval >= 5)) interval = 300;
-        setInterval(() => {
-          fetch(url, { redirect: "manual" });
-        }, interval * 1000);
+        document.querySelector("body").innerHTML = '<iframe allow="fullscreen"></iframe>';
+        const iframe = document.querySelector("iframe");
+        if (/^\/api\/hassio_ingress\/[^/]+/.test(url)) {
+          if (!(interval >= 5)) interval = 300;
+          iframe.src = url;
+          setInterval(() => {
+            fetch(url, { redirect: "manual" });
+          }, interval * 1000);
+        } else if (/^\w+(?:$|\/)/.test(url)) {
+          url = `/api/ingress/${url}${url.indexOf("/") === -1 ? "/" : ""}`;
+          iframe.src = url;
+          if (interval >= 5) {
+            setInterval(() => {
+              iframe.src = url;
+            }, interval * 1000);
+          }
+        }
       })();
     </script>
   </body>

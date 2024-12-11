@@ -34,7 +34,7 @@ CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
 
-WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio', 'subapp']
+WORK_MODES = ['ingress', 'iframe', 'auth', 'hassio', 'subapp', 'custom']
 UI_MODES = ['normal', 'toolbar', 'replace']
 REWRITE_MODES = ['body', 'header']
 
@@ -135,7 +135,7 @@ async def async_setup(hass, config):
         url, front_url = data[CONF_URL], {}
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
-        if work_mode != 'iframe':
+        if work_mode not in ('iframe', 'custom'):
             ingress_path = f'{API_BASE}/{name}'
             if work_mode != 'hassio':
                 url = url.replace(placeholder, ingress_path).rstrip('/')
@@ -179,8 +179,8 @@ async def async_setup(hass, config):
         elif 'url' in cfg:
             cfg['url'] = url
 
-        cfg['ui_mode'] = data[CONF_UI_MODE]
-        title = data.get(CONF_TITLE)
+        cfg['ui_mode'] = work_mode if work_mode == 'custom' else data[CONF_UI_MODE]
+        title, icon = data.get(CONF_TITLE), data.get(CONF_ICON)
         parent = data.get(CONF_PARENT)
         if parent:
             if name.startswith(parent) and name[len(parent):len(parent)+1] == '_':
@@ -188,6 +188,7 @@ async def async_setup(hass, config):
             if ingress_cfg:
                 ingress_cfg.entry = f'{parent}/{name}'
             if title: cfg['title'] = title
+            if icon: cfg['icon'] = icon
             children.append((name, parent, cfg, ingress_cfg))
             continue
 
@@ -196,7 +197,7 @@ async def async_setup(hass, config):
             js_url = f'{URL_BASE}/entrypoint.js',
             frontend_url_path = name,
             sidebar_title = title,
-            sidebar_icon = data.get(CONF_ICON),
+            sidebar_icon = icon,
             require_admin = data[panel_custom.CONF_REQUIRE_ADMIN],
             embed_iframe = False,
             config = cfg,
@@ -325,7 +326,7 @@ class IngressView(http.HomeAssistantView):
 <html>
   <head>
     <meta charset="UTF-8"/>
-    <script type="module" src="/files/ingress/entrypoint.js"></script>
+    <script async src="/files/ingress/entrypoint.js"></script>
     <script>(async () => {
 await customElements.whenDefined("ha-panel-ingress");
 document.querySelector("ha-panel-ingress").setProperties({panel: {

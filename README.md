@@ -114,7 +114,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **title**: string (REQUIRED) Friendly title for the panel. Will be used in the sidebar.
     - **icon**: [icon](https://www.home-assistant.io/docs/configuration/customizing-devices/#icon) (optional) Icon for entry.
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
-    - **work_mode**: string (oneof `ingress` `subapp` `iframe` `auth` `hassio`, default: ingress)
+    - **work_mode**: string (oneof `ingress` `subapp` `iframe` `auth` `hassio` `custom`, default: ingress)
       - ingress: Ingress function similar to [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/).
       - iframe: Sidebar function similar to [Webpage dashboard](https://www.home-assistant.io/dashboards/dashboards/#webpage-dashboard).
       - auth: Work with nginx auth_request for backend services can't be proxied by ingress.
