@@ -3,7 +3,7 @@ import {
   CustomPanelProperties,
   PanelInfo,
   navigate,
-  ensureHaPanel,
+  ensureHaElem,
 } from "./ha-interfaces";
 import { fetchHassioAddonInfo, ingressSession } from "./hassio-ingress";
 import { enableSidebarSwipe } from "./hass-sidebar-swipe";
@@ -13,10 +13,11 @@ import { mdiCoffeeOutline } from "@mdi/js";
 const getHassioAddonUrl = async (
   elem: HTMLElement,
   hass: HomeAssistant,
-  addonSlug: string
+  addonSlug: string,
+  dryRun?: boolean
 ): Promise<string | undefined> => {
   const showError = (msg: string): undefined => {
-    (elem.shadowRoot || elem).innerHTML = `<pre>${msg}</pre>`;
+    if (!dryRun) (elem.shadowRoot || elem).innerHTML = `<pre>${msg}</pre>`;
   };
 
   const addon = await fetchHassioAddonInfo(hass, addonSlug);
@@ -28,7 +29,7 @@ const getHassioAddonUrl = async (
   }
   const targetUrl = addon.ingress_url.replace(/\/+$/, "");
 
-  if (!(await ingressSession.init(hass))) {
+  if (!dryRun && !(await ingressSession.init(hass))) {
     return showError(`Unable to create an Ingress session`);
   }
   return targetUrl;
@@ -44,6 +45,7 @@ interface IngressPanelUrlInfo {
 interface IngressPanelConfig {
   children?: Record<string, IngressPanelConfig>;
   title?: string;
+  icon?: string;
   url?: string | IngressPanelUrlInfo;
   index?: string;
   addon?: string;
@@ -103,25 +105,30 @@ class HaPanelIngress extends HTMLElement {
     }
 
     const panel = props.panel as PanelInfo<IngressPanelConfig>;
-    let { config, title, url_path: panelPath } = panel;
+    let { config, url_path: panelPath } = panel;
+    config.title = panel.title!;
+    config.icon = panel.icon!;
     if (config.children) {
-      const page = (props.route?.path || "").split("/")[1];
+      const page = (props.route?.path || "").split("/", 2)[1];
       if (page && page in config.children) {
         config = config.children[page];
         panelPath = `${panelPath}/${page}`;
       }
-    } else {
-      config.title = title || "";
     }
 
     if (this._panelPath === panelPath) {
       return;
     }
     this._panelPath = panelPath;
+    delete this._setProperties;
     return config;
   }
 
-  private async _getTargetUrl(config: IngressPanelConfig, props: CustomPanelProperties) {
+  private async _getTargetUrl(
+    config: IngressPanelConfig,
+    props: CustomPanelProperties,
+    dryRun?: boolean
+  ) {
     let targetUrl = "";
     const urlParams = new URLSearchParams(window.location.search);
     const { url: urlInfo, addon: addonSlug } = config;
@@ -139,7 +146,7 @@ class HaPanelIngress extends HTMLElement {
     } else if (isIngress) {
       targetUrl = `/api/ingress/${config.token!.value}`;
       if (addonSlug) {
-        const url = await getHassioAddonUrl(this, props.hass!, addonSlug);
+        const url = await getHassioAddonUrl(this, props.hass!, addonSlug, dryRun);
         if (!url) {
           return;
         }
@@ -149,21 +156,23 @@ class HaPanelIngress extends HTMLElement {
       targetUrl = urlInfo;
     }
 
-    if (this._isHassio) {
-      ingressSession.fini();
-      delete this._isHassio;
-    }
-    if (addonSlug) {
-      this._isHassio = props.hass;
-      if (this._disconnected) {
+    if (!dryRun) {
+      if (this._isHassio) {
         ingressSession.fini();
+        delete this._isHassio;
+      }
+      if (addonSlug) {
+        this._isHassio = props.hass;
+        if (this._disconnected) {
+          ingressSession.fini();
+        }
       }
     }
 
-    let { index } = config;
+    let { index, ui_mode: uiMode } = config;
     if (index !== undefined) {
       const path = urlParams.get("index");
-      if (path && !/(^|\/)\.\.\//.test(path)) {
+      if (!dryRun && path && !/(^|\/)\.\.\//.test(path)) {
         index = path.replace(/^\/+/, "");
       }
       targetUrl = `${targetUrl}/${index}`;
@@ -174,12 +183,14 @@ class HaPanelIngress extends HTMLElement {
       targetUrl = url.href;
     }
 
-    if (urlParams.has("replace")) {
+    if (dryRun || uiMode === "custom") {
+      return targetUrl;
+    } else if (urlParams.has("replace")) {
       if (addonSlug) {
         targetUrl = `/files/ingress/iframe.html?ingress=${encodeURIComponent(targetUrl)}`;
       }
       window.location.href = targetUrl;
-    } else if (config.ui_mode === "replace") {
+    } else if (uiMode === "replace") {
       if (targetUrl.indexOf("://") !== -1) {
         window.location.href = targetUrl;
       }
@@ -194,7 +205,46 @@ class HaPanelIngress extends HTMLElement {
     config: IngressPanelConfig,
     props: CustomPanelProperties
   ) {
-    const { title } = config;
+    const forwardProps = (elem: any, keys: string[]) => {
+      if ("setProperties" in elem) {
+        return elem.setProperties as (props: CustomPanelProperties) => void;
+      } else {
+        return (props: CustomPanelProperties) => {
+          for (const k of keys) {
+            if (k in props) elem[k] = props[k as keyof typeof props];
+          }
+        };
+      }
+    };
+
+    const root = this.shadowRoot as ShadowRoot;
+    const { ui_mode: uiMode, title, icon } = config;
+    if (uiMode === "custom") {
+      const children: Record<string, IngressPanelConfig> = {};
+      for (const [k, c] of Object.entries(config.children || {})) {
+        if (!c.title) continue;
+        const url = await this._getTargetUrl(c, props, true);
+        if (url) {
+          const { title, icon, ui_mode } = c;
+          children[k] = { url, title, icon, ui_mode };
+        }
+      }
+      try {
+        const { default: create } = await import(targetUrl);
+        const elem = await create({ children, title, icon, ensureHaElem, ingressSession });
+        if (!(elem instanceof HTMLElement)) {
+          throw new Error("custom should export default async(config)=>HTMLElement");
+        }
+        root.innerHTML = "";
+        root.appendChild(elem);
+        this._setProperties = forwardProps(elem, ["hass", "narrow", "route"]);
+        this._setProperties(props);
+      } catch (e) {
+        root.innerHTML = `<pre>custom url[${targetUrl}] is invalid:\n${e}</pre>`;
+      }
+      return;
+    }
+
     let html = `
 <iframe ${title ? `title="${title}"` : ""} src="${targetUrl}" allow="fullscreen"></iframe>
 `;
@@ -208,7 +258,7 @@ class HaPanelIngress extends HTMLElement {
   }
 `;
 
-    const showToolbar = config.ui_mode === "toolbar";
+    const showToolbar = uiMode === "toolbar";
     if (/*!showToolbar &&*/ enableSidebarSwipe()) {
       html += '<div id="swipebar"></div>';
       css += `
@@ -222,25 +272,18 @@ class HaPanelIngress extends HTMLElement {
     }
 
     if (showToolbar) {
-      await ensureHaPanel("iframe");
+      await ensureHaElem("hass-subpage", "iframe");
       html = `<hass-subpage main-page>${html}
 <ha-icon-button slot="toolbar-icon"></ha-icon-button>
 </hass-subpage>`;
     }
 
-    const root = this.shadowRoot as ShadowRoot;
     root.innerHTML = `<style>${css}</style>${html}`;
     if (showToolbar) {
       const subpage = root.querySelector("hass-subpage") as any;
       this._setButtons(subpage);
       subpage.header = title;
-      this._setProperties = (props) => {
-        for (const k of ["hass", "narrow"]) {
-          if (k in props) {
-            subpage[k] = props[k as keyof typeof props];
-          }
-        }
-      };
+      this._setProperties = forwardProps(subpage, ["hass", "narrow"]);
       this._setProperties(props);
     }
   }

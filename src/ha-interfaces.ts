@@ -18,6 +18,7 @@ export interface HaPanelLovelace extends HTMLElement {
 export interface PanelInfo<T = Record<string, any> | null> {
   component_name: string;
   config: T;
+  icon: string | null;
   title: string | null;
   url_path: string;
 }
@@ -46,9 +47,9 @@ export const navigate = (path: string, options?: NavigateOptions) => {
   (document.createElement("ha-panel-custom") as any).navigate(path, options);
 };
 
-export const ensureHaPanel = async (name: string) => {
-  if (!customElements.get(`ha-panel-${name}`)) {
-    const panels = [{ url_path: "tmp", component_name: "iframe" }];
+export const ensureHaElem = async (name: string, panel: string) => {
+  if (!customElements.get(name)) {
+    const panels = [{ url_path: "tmp", component_name: panel }];
     const ppr = document.createElement("partial-panel-resolver") as any;
     await ppr.getRoutes(panels).routes.tmp.load();
   }
