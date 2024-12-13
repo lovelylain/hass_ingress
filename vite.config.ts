@@ -4,9 +4,9 @@ export default defineConfig({
   build: {
     lib: {
       name: "ha-panel-ingress",
-      entry: "src/main.ts",
+      entry: "src/ha-panel-ingress.ts",
       formats: ["umd"],
-      fileName: () => "ha-panel-ingress.js",
+      fileName: (fmt, entry) => `${entry}.js`,
     },
   },
 });

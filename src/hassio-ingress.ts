@@ -52,8 +52,8 @@ declare global {
     __ingressSession: {
       session: string;
       refCount: number;
-      init: (hass: HomeAssistant) => Promise<boolean>;
-      fini: () => void;
+      init(hass: HomeAssistant): Promise<boolean>;
+      fini(): void;
     };
   }
 }

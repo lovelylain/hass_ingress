@@ -57,7 +57,6 @@ class HaPanelIngress extends HTMLElement {
   private _setProperties?: (props: CustomPanelProperties) => void;
   private _panelPath: string = "";
   private _isHassio?: HomeAssistant;
-  private _disconnected? = true;
 
   constructor() {
     super();
@@ -65,14 +64,12 @@ class HaPanelIngress extends HTMLElement {
   }
 
   public connectedCallback() {
-    delete this._disconnected;
     if (this._isHassio) {
       ingressSession.init(this._isHassio);
     }
   }
 
   public disconnectedCallback() {
-    this._disconnected = true;
     if (this._isHassio) {
       ingressSession.fini();
     }
@@ -163,7 +160,7 @@ class HaPanelIngress extends HTMLElement {
       }
       if (addonSlug) {
         this._isHassio = props.hass;
-        if (this._disconnected) {
+        if (!this.isConnected) {
           ingressSession.fini();
         }
       }
@@ -207,7 +204,7 @@ class HaPanelIngress extends HTMLElement {
   ) {
     const forwardProps = (elem: any, keys: string[]) => {
       if ("setProperties" in elem) {
-        return elem.setProperties as (props: CustomPanelProperties) => void;
+        return (props: CustomPanelProperties) => elem.setProperties(props);
       } else {
         return (props: CustomPanelProperties) => {
           for (const k of keys) {
@@ -222,7 +219,6 @@ class HaPanelIngress extends HTMLElement {
     if (uiMode === "custom") {
       const children: Record<string, IngressPanelConfig> = {};
       for (const [k, c] of Object.entries(config.children || {})) {
-        if (!c.title) continue;
         const url = await this._getTargetUrl(c, props, true);
         if (url) {
           const { title, icon, ui_mode } = c;
@@ -230,8 +226,8 @@ class HaPanelIngress extends HTMLElement {
         }
       }
       try {
-        const { default: create } = await import(targetUrl);
-        const elem = await create({ children, title, icon, ensureHaElem, ingressSession });
+        const { default: create } = await import(/* @vite-ignore */ targetUrl);
+        const elem = await create({ url: targetUrl, title, icon, children, ensureHaElem });
         if (!(elem instanceof HTMLElement)) {
           throw new Error("custom should export default async(config)=>HTMLElement");
         }
@@ -259,7 +255,7 @@ class HaPanelIngress extends HTMLElement {
 `;
 
     const showToolbar = uiMode === "toolbar";
-    if (/*!showToolbar &&*/ enableSidebarSwipe()) {
+    if (enableSidebarSwipe()) {
       html += '<div id="swipebar"></div>';
       css += `
   #swipebar {

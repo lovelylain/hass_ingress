@@ -1,1 +1,0 @@
-import "./ha-panel-ingress";
