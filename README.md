@@ -3,6 +3,8 @@
 ![GitHub actions](https://github.com/lovelylain/hass_ingress/actions/workflows/validate.yaml/badge.svg)
 <a href="https://www.buymeacoffee.com/lovelylain" target="_blank"><img alt="Buy Me A Coffee" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" height="20px"></a>
 
+New Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch tabs.
+
 [Addons\(equivalent containers\) for Docker installation](addons-for-docker-installation.md)
 
 Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/), `hass_ingress` extracts this feature into a standalone integration, it allows you to add additional ingress panels to your Home Assistant frontend. The panels are listed in the sidebar and can contain external resources like the web frontend of your router, your monitoring system, or your media server. Home Assistant will take care of the authentication and the secure connection, so users can access the external resources without extra login.
@@ -24,6 +26,7 @@ Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-a
 - Passing url parameters. (url: `/{panel}?index={overwrite_index}`)
 - Reload Ingress configuration without restarting HA.
 - Toggle Home Assistant sidebar via swipe gestures(code from [hass-sidebar-swipe](https://github.com/breakthestatic/hass-sidebar-swipe)).
+- Support custom view and switch between iframes without reloading.
 
 ## Installation
 
@@ -153,3 +156,30 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
 _Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or use nginx's sub_filter to fix the absolute paths in the response._
 
 _Another option is to use body rewrite rules, see the OpenWrt example above._
+
+## Multiple Tabs
+
+With the following configuration, you can display web pages in multiple tabs without reloading the iframe when switching tabs.
+
+![tabs](images/tabs.png)
+
+```yaml
+ingress:
+  tabs:
+    work_mode: custom # MUST
+    url: /files/ingress/ha-tabs-ingress.js # MUST
+    title: Ingress
+    icon: mdi:cursor-default-click
+  ttyd:
+    parent: tabs
+    work_mode: ingress
+    title: Terminal
+    url:
+  nodered:
+    parent: tabs
+    work_mode: hassio
+    title: Node-RED
+    url:
+```
+
+You can directly visit tabs mode nodered through `/tabs/_/nodered`, or dashboard mode through `/tabs/nodered`.
