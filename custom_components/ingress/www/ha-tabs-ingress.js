@@ -673,7 +673,7 @@ class Wt extends HTMLElement {
   setConfig(t) {
     this.style.height = "100vh", this.attachShadow({ mode: "open" });
     const e = Object.entries(t.children).filter(
-      ([, s]) => s.title && s.ui_mode !== "replace"
+      ([, s]) => (s.title || s.icon) && s.ui_mode !== "replace"
     );
     return this._views = Object.fromEntries(e), this._iframes = e.map(() => zt()), this._curView = 0, this._props = {}, this;
   }
@@ -704,24 +704,29 @@ class Wt extends HTMLElement {
     const s = this._iframes[t].value;
     if (!s.src) {
       const a = e[t].url;
-      !this._isHassio && a.startsWith("/api/hassio_ingress/") && (this._isHassio = !0, await Y.init(this._props.hass)), await this._fixAppShow(a), s.src = a;
+      await this._fixAppShow(a), s.src = a;
     }
     s.style.display = "";
     const i = `/_/${Object.keys(this._views)[t]}`;
     i !== ((n = this._props.route) == null ? void 0 : n.path) && Yt(`${(o = this._props.route) == null ? void 0 : o.prefix}${i}`);
   }
   async _fixAppShow(t) {
-    try {
-      if (!window.externalApp && !window.webkit) return;
-      let e = new URL(t, location.origin);
-      if (e.origin !== location.origin || !e.pathname.startsWith("/api/ingress/")) return;
-      const s = await fetch(e.href);
-      if (!s.ok || !s.redirected || (e = new URL(s.url), e.origin !== location.origin || !e.searchParams.has("replace"))) return;
-      const i = document.createElement("partial-panel-resolver");
-      i.hass = this._props.hass, i.route = { prefix: "", path: e.pathname };
-      const n = this.shadowRoot;
-      n.appendChild(i), await new Promise((o) => setTimeout(o, 1e3)), n.removeChild(i);
-    } catch {
+    let e = new URL(t, location.origin);
+    if (e.origin === location.origin) {
+      if (!this._isHassio && e.pathname.startsWith("/api/hassio_ingress/")) {
+        await Y.init(this._props.hass), this._isHassio = !0;
+        return;
+      } else if (!e.pathname.startsWith("/api/ingress/")) return;
+      try {
+        if (!window.externalApp && !window.webkit) return;
+        const s = await fetch(e.href);
+        if (!s.ok || !s.redirected || (e = new URL(s.url), e.origin !== location.origin || !e.searchParams.has("replace"))) return;
+        const i = document.createElement("partial-panel-resolver");
+        i.hass = this._props.hass, i.route = { prefix: "", path: e.pathname };
+        const n = this.shadowRoot;
+        n.appendChild(i), await new Promise((o) => setTimeout(o, 1e3)), n.removeChild(i);
+      } catch {
+      }
     }
   }
   _render(t) {
