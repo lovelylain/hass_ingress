@@ -30,6 +30,7 @@ CONF_UI_MODE = 'ui_mode'
 CONF_REWRITE = 'rewrite'
 CONF_COOKIE_NAME = 'cookie_name'
 CONF_EXPIRE_TIME = 'expire_time'
+CONF_STATIC_TOKEN = 'static_token'
 CONF_DISABLE_CHUNKED = 'disable_chunked'
 API_BASE = '/api/ingress'
 URL_BASE = '/files/ingress'
@@ -61,6 +62,7 @@ CONFIG_SCHEMA = vol.Schema({
             vol.Required(CONF_REPLACE): cv.string,
         })],
         vol.Optional(CONF_COOKIE_NAME): cv.string,
+        vol.Optional(CONF_STATIC_TOKEN): cv.string,
         vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
         vol.Optional(CONF_DISABLE_CHUNKED): cv.boolean,
     })),
@@ -71,6 +73,7 @@ class IngressCfg:
     cookie_name = 'ingress_token'
     cookie_names = {}
     expire_time = 3600
+    static_token = ''
     disable_chunked = False
     rewrite = []
     sub_apps = []
@@ -82,7 +85,13 @@ class IngressCfg:
         self.token = {}
 
 def new_token(now, cfgs, cfg: IngressCfg):
-    while True:
+    if cfg.static_token:
+        token = f't-{cfg.static_token}'
+        old = cfgs.get(token)
+        if old and old is not cfg:
+            _LOGGER.error('static_token conflict with %s, use dynamic for %s!', old.name, cfg.name)
+            del cfg.static_token
+    while not cfg.static_token:
         token = base64.urlsafe_b64encode(os.urandom(33)).decode()
         if token not in cfgs:
             break
@@ -125,10 +134,21 @@ async def _async_register_static_paths(hass_http, configs):
     else:
         for c in configs: hass_http.register_static_path(*c)
 
+async def get_js_url(hass, domain):
+    js_url = f'{URL_BASE}/entrypoint.js'
+    try:
+        from homeassistant.loader import async_get_integration
+        integration = await async_get_integration(hass, domain)
+        js_url = f'{js_url}?v={integration.version}'
+    except Exception:
+        pass
+    return js_url
+
 async def async_setup(hass, config):
     now = int(time.time())
     cfgs, panels, ingresses, children = {}, {}, {}, []
     placeholder = '$http_x_ingress_path'
+    js_url = await get_js_url(hass, DOMAIN)
     for name, data in config.get(DOMAIN, {}).items():
         ingress_cfg = None
         work_mode = data[CONF_WORK_MODE]
@@ -149,6 +169,7 @@ async def async_setup(hass, config):
                 headers=headers,
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
+                static_token=data.get(CONF_STATIC_TOKEN),
             )
             if work_mode in ('ingress', 'subapp'):
                 rewrite = data.get(CONF_REWRITE)
@@ -194,7 +215,7 @@ async def async_setup(hass, config):
 
         panels[name] = dict(
             webcomponent_name = 'ha-panel-ingress',
-            js_url = f'{URL_BASE}/entrypoint.js',
+            js_url = js_url,
             frontend_url_path = name,
             sidebar_title = title,
             sidebar_icon = icon,
@@ -359,14 +380,15 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
         if not cfg or cfg.mode not in ('ingress', 'subapp'):
             # cookie invalid, try redirect to entry
             for cfg in ([cfg] if cfg else self._config.values()):
-                if cfg.name == token:
-                    if request.query_string:
-                        path = f'{path}?{request.query_string}'
-                    if cfg.mode == 'auth':
-                        resp = await self._handle_redirect(cfg, request, path)
-                        if resp is not None: return resp
-                    path = urlencode({'replace':'', 'index':path})
-                    raise web.HTTPFound(f'/{cfg.entry}?{path}')
+                if cfg.name != token:
+                    continue
+                if request.query_string:
+                    path = f'{path}?{request.query_string}'
+                if cfg.mode == 'auth':
+                    resp = await self._handle_redirect(cfg, request, path)
+                    if resp is not None: return resp
+                path = urlencode({'replace':'', 'index':path})
+                raise web.HTTPFound(f'/{cfg.entry}?{path}')
             raise web.HTTPNotFound()
         url = f'{cfg.url}/{path}'
 
