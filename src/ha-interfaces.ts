@@ -51,6 +51,6 @@ export const ensureHaElem = async (name: string, panel: string) => {
   if (!customElements.get(name)) {
     const panels = [{ url_path: "tmp", component_name: panel }];
     const ppr = document.createElement("partial-panel-resolver") as any;
-    await ppr.getRoutes(panels).routes.tmp.load();
+    await (ppr._getRoutes || ppr.getRoutes).call(ppr, panels).routes.tmp.load();
   }
 };
