@@ -69,6 +69,7 @@ CONFIG_SCHEMA = vol.Schema({
 }, extra=vol.ALLOW_EXTRA)
 
 class IngressCfg:
+    sub_path = ''
     headers = {}
     cookie_name = 'ingress_token'
     cookie_names = {}
@@ -102,7 +103,7 @@ def new_token(now, cfgs, cfg: IngressCfg):
     tkcfg['expire'] = now + cfg.expire_time
     return tkcfg
 
-def get_cfg_by_token(hass, cfgs, token):
+def get_cfg_by_token(hass, cfgs, token) -> tuple[str, IngressCfg]:
     cfg = cfgs.get(token)
     if cfg:
         # token valid, check refresh
@@ -113,7 +114,7 @@ def get_cfg_by_token(hass, cfgs, token):
             hass.bus.async_fire(EVENT_PANELS_UPDATED)
     return token, cfg
 
-def get_cfg_by_cookie(request, cfgs, name):
+def get_cfg_by_cookie(request, cfgs, name) -> IngressCfg:
     cookie_name = IngressCfg.cookie_names.get(name) or IngressCfg.cookie_name
     return cfgs.get(request.cookies.get(cookie_name))
 
@@ -156,21 +157,25 @@ async def async_setup(hass, config):
         if isinstance(url, dict):
             url, front_url = url[CONF_DEFAULT], url
         if work_mode not in ('iframe', 'custom'):
-            ingress_path = f'{API_BASE}/{name}'
+            ingress_path, sub_path = f'{API_BASE}/{name}', ''
             if work_mode != 'hassio':
                 url = url.replace(placeholder, ingress_path).rstrip('/')
                 if '://' not in url:
                     url = f'http://{url}'
+                pos = url.find('/', url.index('://')+3)
+                if pos > 0:
+                    url, sub_path = url[:pos], url[pos:]
             headers = {}
             for k, v in data.get(CONF_HEADERS, {}).items():
                 headers[k.title()] = v.replace(placeholder, ingress_path)
             ingress_cfg = dict(
-                mode=work_mode, name=name, url=url, entry=name,
+                mode=work_mode, name=name, origin=url, sub_path=sub_path, entry=name,
                 headers=headers,
                 cookie_name=data.get(CONF_COOKIE_NAME),
                 expire_time=data.get(CONF_EXPIRE_TIME),
                 static_token=data.get(CONF_STATIC_TOKEN),
             )
+            url += sub_path
             if work_mode in ('ingress', 'subapp'):
                 rewrite = data.get(CONF_REWRITE)
                 if rewrite:
@@ -287,7 +292,7 @@ class IngressView(http.HomeAssistantView):
         if not name or not url:
             raise web.HTTPNotFound()
         # check ingressToken parameter
-        cfg = None
+        cfg: IngressCfg = None
         url = urlparse(url)
         params = parse_qs(url.query)
         if 'ingressToken' in params:
@@ -295,7 +300,7 @@ class IngressView(http.HomeAssistantView):
         if cfg:
             # valid, remove ingressToken if has X-Hass-Origin else return 200
             hass_origin = request.headers.get('X-Hass-Origin')
-            if hass_origin:
+            if hass_origin and request.method in ('GET', 'HEAD'):
                 del params['ingressToken']
                 url = url._replace(query=urlencode(params, doseq=True)).geturl()
                 resp = web.HTTPUnauthorized(headers={'Location': url})
@@ -312,7 +317,7 @@ class IngressView(http.HomeAssistantView):
         for cfg in self._config.values():
             if cfg.name == name:
                 params = {'replace': ''}
-                root = urlparse(cfg.url + '/').path
+                root = cfg.sub_path + '/'
                 if url.path.startswith(root):
                     params['index'] = urlunparse(('', '', url.path[len(root):]) + url[3:])
                 hass_origin = request.headers.get('X-Hass-Origin', '')
@@ -364,7 +369,8 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
         if token == '_' and path == 'auth':
             return await self._handle_auth(request)
         token, cfg = get_cfg_by_token(self._hass, self._config, token)
-        if cfg:
+        if cfg and request.method in ('GET', 'HEAD'):
+            # only redirect when get or head method
             url = f'{API_BASE}/{cfg.name}/'
             if request.query_string:
                 path = f'{path}?{request.query_string}'
@@ -376,7 +382,8 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
                 resp.headers.add('Set-Cookie', f'{cfg.cookie_name}={cfg.token["value"]};'
                                  f' HttpOnly; Path={API_BASE}/{cfg.name}/')
             raise resp
-        cfg = get_cfg_by_cookie(request, self._config, token)
+        elif not cfg:
+            cfg = get_cfg_by_cookie(request, self._config, token)
         if not cfg or cfg.mode not in ('ingress', 'subapp'):
             # cookie invalid, try redirect to entry
             for cfg in ([cfg] if cfg else self._config.values()):
@@ -390,7 +397,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
                 path = urlencode({'replace':'', 'index':path})
                 raise web.HTTPFound(f'/{cfg.entry}?{path}')
             raise web.HTTPNotFound()
-        url = f'{cfg.url}/{path}'
+        url = f'{cfg.origin}{cfg.sub_path}/{path}'
 
         try:
             # Websocket
@@ -409,7 +416,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
     patch = _handle
     # options = _handle
 
-    async def _handle_websocket(self, request, cfg, url):
+    async def _handle_websocket(self, request, cfg: IngressCfg, url):
         if hdrs.SEC_WEBSOCKET_PROTOCOL in request.headers:
             req_protocols = [
                 str(proto.strip())
@@ -446,7 +453,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
 
         return ws_server
 
-    async def _handle_request(self, request, cfg, url):
+    async def _handle_request(self, request, cfg: IngressCfg, url):
         data = request.content
         if (request.headers.get(hdrs.TRANSFER_ENCODING) != 'chunked' and
             (cfg.disable_chunked or int(request.headers.get(hdrs.CONTENT_LENGTH, 0)) < 4194000)):
@@ -525,7 +532,7 @@ document.querySelector("ha-panel-ingress").setProperties({panel: {
             return response
 
 
-def _init_header(request, cfg, url):
+def _init_header(request, cfg: IngressCfg, url):
     headers = {}
 
     # filter flags
@@ -550,6 +557,7 @@ def _init_header(request, cfg, url):
 
     # Set X-Ingress-Path
     headers['X-Ingress-Path'] = f'{API_BASE}/{cfg.name}'
+    headers['X-Ingress-SubPath'] = cfg.sub_path
 
     # Set X-Forwarded-For
     forward_for = request.headers.get(hdrs.X_FORWARDED_FOR)
