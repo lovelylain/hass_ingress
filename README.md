@@ -1,9 +1,16 @@
 # hass_ingress
 
 ![GitHub actions](https://github.com/lovelylain/hass_ingress/actions/workflows/validate.yaml/badge.svg)
-<a href="https://www.buymeacoffee.com/lovelylain" target="_blank"><img alt="Buy Me A Coffee" src="https://cdn.buymeacoffee.com/buttons/v2/arial-yellow.png" height="20px"></a>
 
-New Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch tabs.
+**💡 Tip:** If this project helps you, consider giving me a tip for the time I spent building this project:
+
+<a href="https://www.buymeacoffee.com/lovelylain" target="_blank">
+  <img src="https://cdn.buymeacoffee.com/buttons/default-yellow.png" alt="Buy Me A Coffee" width="150px">
+</a>
+
+v1.2.4 Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch tabs.
+
+v1.2.5 Feature: [Static Token](#static-token) public links that never expire.
 
 [Addons\(equivalent containers\) for Docker installation](addons-for-docker-installation.md)
 
@@ -151,6 +158,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
       - **replace**: string (REQUIRED) Python Replacement for the matched RegEx, use `\1`, `\2` to reference capture groups. `$http_x_ingress_path` in this option will be replaced with `/api/ingress/{name}`.
     - **expire_time**: integer (optional, default: 3600) Hass ingress generates a token for each panel, which is used to access the panel. This option is used to specify the token validity period.
     - **cookie_name**: string (optional, default: ingress_token) Hass ingress uses cookies to pass tokens, if the cookie name conflicts with the backend service, you can use other value through this option.
+    - **static_token**: string (optional, default empty) You provide the token instead of dynamically generating one, so you can obtain access links (`/api/ingress/t-{static_token}/`) that never expire. For example set static_token=`a-secret-token-value`, you can access the backend service without login HA through `/api/ingress/t-a-secret-token-value/`.
     - **disable_chunked**: boolean (optional, default: false) If the backend service does not support chunked encoding, you can disable chunked through this option.
 
 _Notice: Not all backend services can be proxied by ingress, it must use relative paths or use `X-Ingress-Path` http header to generate correct absolute paths. For unsupported backend services, you can try `work_mode: auth` to work with another domain reverse proxied by nginx, or use nginx's sub_filter to fix the absolute paths in the response._
@@ -183,3 +191,21 @@ ingress:
 ```
 
 You can directly visit tabs mode nodered through `/tabs/_/nodered`, or dashboard mode through `/tabs/nodered`.
+
+## Static Token
+
+With static token feature, you can access the backend service without login HA through `/api/ingress/t-{static_token}/`.
+
+```yaml
+ingress:
+  ttyd: # you can access ttyd with /api/ingress/t-secret-token-value-for-ttyd/ without login.
+    work_mode: ingress
+    title: Terminal
+    url:
+    static_token: secret-token-value-for-ttyd
+  nodered_webhook: # you can access ttyd with /api/ingress/t-secret-token-value-for-nodered_webhook/ without login.
+    parent: nodered
+    work_mode: ingress
+    url:
+    static_token: secret-token-value-for-nodered_webhook
+```
