@@ -51,6 +51,7 @@ interface IngressPanelConfig {
   addon?: string;
   token?: { value: string };
   ui_mode?: string;
+  field?: string;
 }
 
 class HaPanelIngress extends HTMLElement {
@@ -176,7 +177,7 @@ class HaPanelIngress extends HTMLElement {
     }
     if (config.token && !isIngress) {
       const url = new URL(targetUrl);
-      url.searchParams.set("ingressToken", config.token.value);
+      url.searchParams.set(config.field!, config.token.value);
       targetUrl = url.href;
     }
 
