@@ -1,9 +1,10 @@
 import base64
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED  # type: ignore
-import logging
 import os
 import time
 from typing import TYPE_CHECKING
+
+from .const import LOGGER as _LOGGER
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -15,9 +16,6 @@ if TYPE_CHECKING:
     class Token(TypedDict):
         value: str
         expire: int
-
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class RewriteCfg:

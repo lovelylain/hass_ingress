@@ -9,6 +9,7 @@ except ImportError:
         pass
 
 
+import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 
 
 DOMAIN: "Final" = "ingress"
+LOGGER: "Final" = logging.getLogger(__package__)
 
 API_BASE: "Final" = "/api/ingress"
 URL_BASE: "Final" = "/files/ingress"

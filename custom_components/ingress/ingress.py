@@ -6,23 +6,19 @@ from homeassistant.components import frontend, http
 from http.cookies import SimpleCookie
 from ipaddress import ip_address
 import json
-import logging
 from multidict import CIMultiDict
 import re
 from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode, quote
 from yarl import URL
 
-from .const import DOMAIN, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
+from .const import DOMAIN, LOGGER as _LOGGER, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from typing import Any, Callable, Iterable
 
     from .config import IngressStore, IngressCfg, RewriteCfg
-
-
-_LOGGER = logging.getLogger(__name__)
 
 X_INGRESS_NAME = "X-Ingress-Name"
 X_ORIGINAL_URL = "X-Original-Url"

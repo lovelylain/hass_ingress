@@ -10,7 +10,6 @@ from homeassistant.const import (
     CONF_URL,
 )
 import homeassistant.helpers.config_validation as cv
-import logging
 import os
 import re
 import time
@@ -18,7 +17,7 @@ from typing import TYPE_CHECKING, cast
 import voluptuous as vol
 from yarl import URL
 
-from .const import DOMAIN, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
+from .const import DOMAIN, LOGGER as _LOGGER, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
 from .config import IngressStore, IngressCfg, RewriteCfg
 from .ingress import IngressView, std_header_name
 
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
         panels: set[str]
 
 
-_LOGGER = logging.getLogger(__name__)
 VERSION = ""
 
 CONF_TITLE: "Final" = "title"
