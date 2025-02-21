@@ -41,3 +41,8 @@ class UIMode(StrEnum):
 class RewriteMode(StrEnum):
     HEADER = "header"
     BODY = "body"
+
+
+class ConfMode(StrEnum):
+    AGENT = "agent"
+    YAML = "yaml"

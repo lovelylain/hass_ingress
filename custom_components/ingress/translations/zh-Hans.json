@@ -1,0 +1,27 @@
+{
+  "config": {
+    "abort": {
+      "reconfigure_successful": "重新配置成功"
+    },
+    "error": {
+      "cannot_connect": "连接失败",
+      "invalid_auth": "身份验证无效"
+    },
+    "step": {
+      "my_agent": {
+        "data": {
+          "url": "ingress agent 的 URL"
+        },
+        "description": "输入已运行的 ingress agent 的 URL，如果您没有运行，则应首先安​​装并运行它。",
+        "title": "Ingress agent"
+      },
+      "user": {
+        "data": {
+          "mode": "配置模式"
+        },
+        "description": "选择配置模式。\nagent: 使用 ui 配置，需要运行 agent。\nyaml: 手动编辑 configuration.yaml 文件.",
+        "title": "Ingress"
+      }
+    }
+  }
+}

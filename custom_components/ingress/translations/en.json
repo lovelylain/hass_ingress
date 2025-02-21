@@ -1,0 +1,27 @@
+{
+  "config": {
+    "abort": {
+      "reconfigure_successful": "Re-configuration was successful"
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication"
+    },
+    "step": {
+      "my_agent": {
+        "data": {
+          "url": "URL of the ingress agent"
+        },
+        "description": "Enter the URL to your already running ingress agent. If you do not have the ingress agent running, you should install it first.",
+        "title": "Ingress agent"
+      },
+      "user": {
+        "data": {
+          "mode": "Configuration mode"
+        },
+        "description": "Select configuration mode.\nagent: Configure with ui, requires running an agent.\nyaml: Manually edit configuration.yaml file.",
+        "title": "Ingress"
+      }
+    }
+  }
+}

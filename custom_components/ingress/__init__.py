@@ -9,6 +9,8 @@ from homeassistant.const import (
     CONF_PATH,
     CONF_URL,
 )
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 import os
 import re
@@ -17,20 +19,33 @@ from typing import TYPE_CHECKING, cast
 import voluptuous as vol
 from yarl import URL
 
-from .const import DOMAIN, LOGGER as _LOGGER, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
+from .const import (
+    DOMAIN,
+    LOGGER as _LOGGER,
+    API_BASE,
+    URL_BASE,
+    WorkMode,
+    UIMode,
+    RewriteMode,
+    ConfMode,
+)
 from .config import IngressStore, IngressCfg, RewriteCfg
 from .ingress import IngressView, std_header_name
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
+    from homeassistant.config_entries import ConfigEntry
     from typing import Any, Final, TypedDict
+    from .client import IngressClient
 
     class DomainData(TypedDict):
+        client: IngressClient
         config: IngressStore
         panels: set[str]
 
 
 VERSION = ""
+CONNECT_TIMEOUT = 20
 
 CONF_TITLE: "Final" = "title"
 CONF_MATCH: "Final" = "match"
@@ -93,6 +108,70 @@ async def async_setup(hass: "HomeAssistant", config) -> bool:
     # init once
     data = await _async_init(hass)
 
+    # init config entry
+    entries = hass.config_entries.async_entries(DOMAIN)
+    if not entries:
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(DOMAIN, context={"source": "import"})
+        )
+
+    # init yaml mode
+    if not entries or entries[0].data[CONF_MODE] == ConfMode.YAML:
+        await setup_domain(hass, data, config)
+
+    return True
+
+
+async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    if entry.data[CONF_MODE] != ConfMode.AGENT:
+        return True
+
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+    from .client import create_client
+    from .client.exceptions import ClientException
+
+    # init client
+    client = create_client(entry.data[CONF_URL], async_get_clientsession(hass))
+
+    # get config
+    config = None
+    try:
+        async with asyncio.timeout(CONNECT_TIMEOUT):
+            await client.connect()
+            config = await get_remote_config(hass, client)
+    except ClientException as err:
+        raise ConfigEntryNotReady("Failed to connect to ingress agent") from err
+    except Exception as err:
+        _LOGGER.exception("Failed to connect to ingress agent")
+        raise ConfigEntryNotReady("Unknown error connecting to the ingress agent") from err
+    finally:
+        if config is None:
+            client.disconnect()
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, lambda e: client.disconnect())
+    )
+
+    # setup config
+    data: DomainData = hass.data[DOMAIN]
+    data["client"] = client
+    await setup_domain(hass, data, config)
+    return True
+
+
+async def get_remote_config(hass: "HomeAssistant", client: "IngressClient") -> dict[str, "Any"]:
+    # TODO
+    return {DOMAIN: {}}
+
+
+async def async_unload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    client: IngressClient
+    if client := hass.data[DOMAIN].pop("client", None):
+        client.disconnect()
+    return True
+
+
+async def setup_domain(hass: "HomeAssistant", data: "DomainData", config) -> None:
     # clean
     for name in data["panels"]:
         frontend.async_remove_panel(hass, name)
@@ -111,15 +190,12 @@ async def async_setup(hass: "HomeAssistant", config) -> bool:
     data["panels"].update(panels)
     await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
 
-    return True
-
 
 async def _async_init(hass: "HomeAssistant") -> "DomainData":
     """Init DomainData and service once."""
     data: DomainData = hass.data.setdefault(DOMAIN, {})
     if "config" not in cast(dict, data):
         from homeassistant.const import SERVICE_RELOAD
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
         from homeassistant.helpers.reload import async_integration_yaml_config
         from homeassistant.helpers.service import async_register_admin_service
 
@@ -137,8 +213,12 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
 
         # register reload config
         async def reload_config(call: "ServiceCall"):
-            config = await async_integration_yaml_config(hass, DOMAIN)
-            await async_setup(hass, config or {})
+            data: DomainData = hass.data[DOMAIN]
+            if client := data.get("client"):
+                config = await get_remote_config(hass, client)
+            else:
+                config = await async_integration_yaml_config(hass, DOMAIN)
+            await setup_domain(hass, data, config or {})
             hass.bus.async_fire(f"event_{DOMAIN}_reloaded", context=call.context)
 
         async_register_admin_service(hass, DOMAIN, SERVICE_RELOAD, reload_config)

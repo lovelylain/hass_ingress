@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ingress",
+        "description": "Select configuration mode.\nagent: Configure with ui, requires running an agent.\nyaml: Manually edit configuration.yaml file.",
+        "data": {
+          "mode": "Configuration mode"
+        }
+      },
+      "my_agent": {
+        "title": "Ingress agent",
+        "description": "Enter the URL to your already running ingress agent. If you do not have the ingress agent running, you should install it first.",
+        "data": {
+          "url": "URL of the ingress agent"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]"
+    },
+    "abort": {
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+    }
+  }
+}
