@@ -334,7 +334,7 @@ def _create_url(cfg: "IngressCfg", path: str) -> URL:
     """Create URL to service."""
     base_path = f"{cfg.sub_path}/"
     try:
-        url = cfg.origin.join(URL(base_path + quote(path)))
+        url = cfg.origin.join(URL(base_path + quote(path.lstrip("/"))))
     except ValueError as err:
         raise web.HTTPBadRequest from err
     if not url.path.startswith(base_path):
