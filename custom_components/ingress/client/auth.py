@@ -17,3 +17,6 @@ class IngressAuth:
     @property
     def access_token(self):
         return ""
+
+    async def refresh(self):
+        pass

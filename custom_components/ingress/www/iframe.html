@@ -20,6 +20,7 @@
       (() => {
         const urlParams = new URLSearchParams(window.location.search);
         let url = urlParams.get("ingress");
+        if (!url) return;
         let interval = +urlParams.get("refresh");
         document.querySelector("body").innerHTML = '<iframe allow="fullscreen"></iframe>';
         const iframe = document.querySelector("iframe");
@@ -38,6 +39,9 @@
             }, interval * 1000);
           }
         }
+        iframe.addEventListener("load", () => {
+          document.title = iframe.contentDocument.title;
+        });
       })();
     </script>
   </body>

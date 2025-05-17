@@ -50,7 +50,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     raise ClientException
                 if "://" not in url:
                     url = f"http://{url}"
-                client = create_client(url, async_get_clientsession(self.hass))
+                client = create_client(None, url, async_get_clientsession(self.hass))
                 try:
                     async with asyncio.timeout(CONNECT_TIMEOUT):
                         await client.connect()

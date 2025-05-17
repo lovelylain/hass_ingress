@@ -131,7 +131,8 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     from .client.exceptions import ClientException
 
     # init client
-    client = create_client(entry.data[CONF_URL], async_get_clientsession(hass))
+    client = create_client(hass, entry.data[CONF_URL], async_get_clientsession(hass))
+    client.on_client_event("ready", on_remote_ready)
 
     # get config
     config = None
@@ -157,6 +158,10 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     data["client"] = client
     await setup_domain(hass, data, config)
     return True
+
+
+async def on_remote_ready(hass: "HomeAssistant", client: "IngressClient", _: "Any"):
+    await client.send_command({"type": "subscribe"})
 
 
 async def get_remote_config(hass: "HomeAssistant", client: "IngressClient") -> dict[str, "Any"]:

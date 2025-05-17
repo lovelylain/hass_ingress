@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, TYPE_CHECKING, cast
+from typing import Any, Generic, TypeVar, TYPE_CHECKING, cast
 
 from .connection import WebsocketConnection
 from .exceptions import (
@@ -16,9 +16,10 @@ if TYPE_CHECKING:
 
     from .auth import IngressAuth
 
-    type ClientEventListener = Callable[["IngressClient", Any], Awaitable[None] | None]
-    type CommandHandler = Callable[["IngressClient", dict[str, Any]], Awaitable[None] | None]
-    type EventSubscriber = tuple[CommandHandler, tuple[str] | None, tuple[str] | None]
+    type ClientEventListener[T] = Callable[[T, "IngressClient", Any], Awaitable[None] | None]
+    type BinaryHandler[T] = Callable[[T, "IngressClient", bytes], Awaitable[None] | None]
+    type EventHandler[T] = Callable[[T, "IngressClient", dict[str, Any]], Awaitable[None] | None]
+    type EventSubscriber[T] = tuple[EventHandler[T], tuple[str] | None, tuple[str] | None]
 
 
 MSG_TYPE_AUTH = "auth"
@@ -27,51 +28,53 @@ MSG_TYPE_AUTH_INVALID = "auth_invalid"
 MSG_TYPE_RESULT = "result"
 MSG_TYPE_EVENT = "event"
 
+T = TypeVar("T")
 
-class IngressClient:
+
+class IngressClient(Generic[T]):
     """Manage an Ingress server remotely."""
 
-    def __init__(self, auth: "IngressAuth"):
-        self._auth = auth
+    def __init__(self, ctx: T, auth: "IngressAuth"):
+        self._ctx = ctx
+        self.auth = auth
         self._conn = WebsocketConnection(auth.ws_url, auth.websession)
-        self._event_listeners: dict[str, list[ClientEventListener]] = {}
-        self._command_handlers: dict[str, CommandHandler] = {}
-        self._subscribers: list[EventSubscriber] = []
+        self._event_listeners: dict[str, list[ClientEventListener[T]]] = {}
+        self._binary_handlers: dict[int, BinaryHandler[T]] = {}
+        self._subscribers: list[EventSubscriber[T]] = []
         self._result_futures: dict[int | None, asyncio.Future[Any]] = {}
         self._receive_task: asyncio.Task | None = None
 
     def on_client_event(
-        self, event_type: str, callback: "ClientEventListener"
+        self, event_type: str, callback: "ClientEventListener[T]"
     ) -> "Callable[[], None]":
         listeners = self._event_listeners.setdefault(event_type, [])
         listeners.append(callback)
         return lambda: listeners.remove(callback)
 
-    async def _fire_event(self, event_type: str, event_data: Any = None) -> None:
-        for callback in self._event_listeners.get(event_type, []):
-            if asyncio.iscoroutinefunction(callback):
-                await callback(self, event_data)
-            else:
-                callback(self, event_data)
+    def _fire_event(self, event_type: str, event_data: Any = None) -> None:
+        async def fire_event():
+            for callback in self._event_listeners.get(event_type, []):
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(self._ctx, self, event_data)
+                else:
+                    callback(self._ctx, self, event_data)
 
-    def register_command(self, msg_type: str, handler: "CommandHandler") -> None:
-        """Register a websocket command."""
-        self._command_handlers[msg_type] = handler
+        self._loop.create_task(fire_event())
 
-    async def _handle_command(self, callback: "CommandHandler", msg: dict[str, Any]) -> None:
-        if asyncio.iscoroutinefunction(callback):
-            await callback(self, msg)
+    def register_binary(self, id: int, handler: "BinaryHandler[T]"):
+        if handler:
+            self._binary_handlers[id] = handler
         else:
-            callback(self, msg)
+            self._binary_handlers.pop(id, None)
 
     def subscribe(
         self,
-        cb_func: "CommandHandler",
+        cb_func: "EventHandler[T]",
         ev_type: str | tuple[str] | None = None,
         ev_id: str | tuple[str] | None = None,
     ) -> "Callable[[], None]":
         """Add callback to event listeners. Returns function to remove the listener."""
-        subscriber: EventSubscriber = (
+        subscriber: EventSubscriber[T] = (
             cb_func,
             ((ev_type,) if isinstance(ev_type, str) else ev_type),
             ((ev_id,) if isinstance(ev_id, str) else ev_id),
@@ -79,19 +82,35 @@ class IngressClient:
         self._subscribers.append(subscriber)
         return lambda: self._subscribers.remove(subscriber)
 
-    async def _handle_event(self, msg: dict[str, Any]) -> None:
-        ev_type, ev_id = msg.get("ev_type"), msg.get("ev_id")
-        for cb_func, ev_types, ev_ids in self._subscribers:
-            if ev_types is not None and ev_type not in ev_types:
-                continue
-            if ev_ids is not None and ev_id not in ev_ids:
-                continue
-            await self._handle_command(cb_func, msg)
+    def _handle_event(self, msg: dict[str, Any]) -> None:
+        async def handle_event():
+            ev_type, ev_id = msg.get("ev_type"), msg.get("ev_id")
+            for cb_func, ev_types, ev_ids in self._subscribers:
+                if ev_types is not None and ev_type not in ev_types:
+                    continue
+                if ev_ids is not None and ev_id not in ev_ids:
+                    continue
+                if asyncio.iscoroutinefunction(cb_func):
+                    await cb_func(self._ctx, self, msg)
+                else:
+                    cb_func(self._ctx, self, msg)
+
+        self._loop.create_task(handle_event())
 
     async def receive_message(self) -> "AsyncGenerator[dict[str, Any]]":
         """Receive the next message from the server."""
         try:
-            msg = json_loads(await self._conn.receive_message())
+            while True:
+                if not (data := await self._conn.receive_message()):
+                    continue
+                if not isinstance(data, bytes):
+                    break
+                if not (handler := self._binary_handlers.get(data[0])):
+                    if data[0] in b"[{":
+                        break
+                    raise InvalidMessage(f"Received invalid binary: {data[0]}")
+                handler(self._ctx, self, data[1:])
+            msg = json_loads(data)
         except (TypeError, ValueError) as err:
             raise InvalidMessage(f"Received invalid json: {err}") from err
 
@@ -115,8 +134,8 @@ class IngressClient:
         server_info = None
 
         try:
-            await self.send_message({"type": MSG_TYPE_AUTH, "token": self._auth.access_token})
-            while not self._stop_called:
+            await self.send_message({"type": MSG_TYPE_AUTH, "token": self.auth.access_token})
+            while not self._stop_called and server_info is None:
                 async for msg in self.receive_message():
                     msg_type = msg["type"]
                     if msg_type == MSG_TYPE_AUTH_OK:
@@ -128,28 +147,30 @@ class IngressClient:
             if server_info is None:
                 await self._conn.disconnect()
 
-        await self._fire_event("ready")
+        self._binary_handlers.clear()
         self._msg_id = 0
         return True
 
     async def reconnect(self) -> None:
-        await self._fire_event("disconnected")
         for future in self._result_futures.values():
             future.set_exception(ConnectionLost)
         self._result_futures.clear()
+        self._fire_event("disconnected")
 
         while not self._stop_called:
             await self._conn.disconnect()
             try:
                 await self._connect()
+                self._fire_event("ready")
+                break
             except InvalidAuth as err:
-                await self._fire_event("reconnect-error", err)
                 raise
             except ClientException:
                 await asyncio.sleep(5)
 
     async def connect(self) -> bool:
         async def receive_task():
+            client_event = None
             try:
                 while not self._stop_called:
                     try:
@@ -159,9 +180,13 @@ class IngressClient:
                         LOGGER.warning(err)
                     except ConnectionLost:
                         await self.reconnect()
+            except InvalidAuth as err:
+                client_event = ("reconnect-error", err)
             finally:
                 await self._conn.disconnect()
                 self._receive_task = None
+                if client_event:
+                    self._fire_event(*client_event)
 
         if self._receive_task is not None:
             return False
@@ -169,6 +194,7 @@ class IngressClient:
         await self._connect()
         self._loop = asyncio.get_running_loop()
         self._receive_task = self._loop.create_task(receive_task())
+        self._fire_event("ready")
         return True
 
     def disconnect(self):
@@ -210,6 +236,4 @@ class IngressClient:
                 err = msg.get("error", {})
                 future.set_exception(ResultException(err.get("code"), err.get("msg")))
         elif msg_type == MSG_TYPE_EVENT:
-            await self._handle_event(msg)
-        elif handler := self._command_handlers.get(msg_type):
-            await self._handle_command(handler, msg)
+            self._handle_event(msg)
