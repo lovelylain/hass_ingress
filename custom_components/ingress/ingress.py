@@ -1,9 +1,9 @@
 import aiohttp
 from aiohttp import hdrs, web, WSMsgType
+from aiohttp.helpers import must_be_empty_body
 import asyncio
 from functools import lru_cache
 from homeassistant.components import frontend, http
-from http.cookies import SimpleCookie
 from ipaddress import ip_address
 import json
 from multidict import CIMultiDict
@@ -46,7 +46,9 @@ RESPONSE_HEADERS_FILTER = {
     hdrs.CONTENT_ENCODING,
 }
 
-MAX_SIMPLE_RESPONSE_SIZE = 4194000
+MAX_SIMPLE_REQUEST_SIZE = 4194000
+
+DISABLED_TIMEOUT = aiohttp.ClientTimeout(total=None)
 
 
 class IngressView(http.HomeAssistantView):  # type: ignore
@@ -206,6 +208,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
     delete = _handle
     patch = _handle
     # options = _handle
+    head = _handle
 
     async def _handle_websocket(
         self, request: web.Request, cfg: "IngressCfg", url: URL
@@ -254,7 +257,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
         data = request.content
         if not request.body_exists or (
             (clen := request.headers.get(hdrs.CONTENT_LENGTH))
-            and (clen := int(clen)) <= MAX_SIMPLE_RESPONSE_SIZE
+            and (clen := int(clen)) <= MAX_SIMPLE_REQUEST_SIZE
         ):
             data = await data.read()
         async with self._websession.request(
@@ -264,7 +267,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             params=request.query,
             allow_redirects=False,
             data=data,
-            timeout=aiohttp.ClientTimeout(total=None),
+            timeout=DISABLED_TIMEOUT,
             skip_auto_headers={hdrs.CONTENT_TYPE},
         ) as result:
             headers = _response_header(result)
@@ -292,14 +295,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
 
             headers = CIMultiDict((k, v) for k, vs in headers.items() for v in vs if v)
             # Simple request
-            if (
-                rewrite_body
-                or result.status in (204, 304)
-                or (
-                    (clen := headers.get(hdrs.CONTENT_LENGTH))
-                    and (clen := int(clen)) <= MAX_SIMPLE_RESPONSE_SIZE
-                )
-            ):
+            if rewrite_body or must_be_empty_body(request.method, result.status):
                 # Return Response
                 body = await result.read()
                 if rewrite_body:
@@ -357,10 +353,8 @@ def _init_header(request: web.Request, cfg: "IngressCfg") -> dict[str, str]:
         if name in INIT_HEADERS_FILTER:
             continue
         if name == hdrs.COOKIE:
-            cookie = SimpleCookie(request.cookies)
-            if cookie.pop(cfg.cookie_name, None) is not None:
-                if not (value := cookie.output(attrs=[], header="", sep=";").strip()):
-                    continue
+            if not (value := cfg.remove_token_from_cookie(value)):
+                continue
         headers[name] = value
     for name, value in cfg.headers.items():
         if value != HEADER_AUTO_PH:

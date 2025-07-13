@@ -1,6 +1,7 @@
 import base64
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED  # type: ignore
 import os
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,7 @@ class IngressCfg:
     sub_path = ""
     headers = {}
     cookie_name = "ingress_token"
+    _cookie_name_re = None
     expire_time = 3600
     static_token = ""
     rewrites: list[RewriteCfg] = []
@@ -49,6 +51,13 @@ class IngressCfg:
             (k, v) for k, v in kwargs.items() if v is not None and v != getattr(self, k, None)
         )
         self.token: "Token" = {"value": "", "expire": 0}
+
+    def remove_token_from_cookie(self, cookie):
+        if self._cookie_name_re is None:
+            self._cookie_name_re = re.compile(
+                rf"(?:^|;\s*){re.escape(self.cookie_name)}=[^;]*(?=;|$)"
+            )
+        return self._cookie_name_re.sub("", cookie).strip("; ")
 
 
 class IngressStore:
