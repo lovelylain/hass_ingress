@@ -3,7 +3,7 @@ from aiohttp import hdrs, web, WSMsgType
 import asyncio
 from functools import lru_cache
 from homeassistant.components import frontend, http
-from http.cookies import SimpleCookie
+from http.cookies import SimpleCookie, CookieError
 from ipaddress import ip_address
 import json
 from multidict import CIMultiDict
@@ -357,7 +357,14 @@ def _init_header(request: web.Request, cfg: "IngressCfg") -> dict[str, str]:
         if name in INIT_HEADERS_FILTER:
             continue
         if name == hdrs.COOKIE:
-            cookie = SimpleCookie(request.cookies)
+            cookie = SimpleCookie()
+            for k, v in request.cookies.items():
+                if k.lower() in ['path', 'expires', 'domain', 'secure', 'httponly']:
+                    continue  # Skip reserved cookie names
+                try:
+                    cookie[k] = v
+                except CookieError:
+                    continue
             if cookie.pop(cfg.cookie_name, None) is not None:
                 if not (value := cookie.output(attrs=[], header="", sep=";").strip()):
                     continue
