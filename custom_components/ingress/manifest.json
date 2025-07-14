@@ -9,5 +9,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/lovelylain/hass_ingress/issues",
   "single_config_entry": true,
-  "version": "1.2.8"
+  "version": "1.2.9"
 }
