@@ -5,7 +5,7 @@ import re
 import time
 from typing import TYPE_CHECKING
 
-from .const import LOGGER as _LOGGER
+from .const import LOGGER as _LOGGER, INGRESS_MODES
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     class Token(TypedDict):
         value: str
         expire: int
+
+    class UserInfo(TypedDict):
+        id: str
+        name: str | None
+        username: str | None
 
 
 class RewriteCfg:
@@ -53,11 +58,12 @@ class IngressCfg:
         self.token: "Token" = {"value": "", "expire": 0}
 
     def remove_token_from_cookie(self, cookie):
-        if self._cookie_name_re is None:
-            self._cookie_name_re = re.compile(
-                rf"(?:^|;\s*){re.escape(self.cookie_name)}=[^;]*(?=;|$)"
-            )
-        return self._cookie_name_re.sub("", cookie).strip("; ")
+        if (cookie_name := self.cookie_name) != USER_TOKEN_COOKIE_NAME:
+            if (cookie_re := self._cookie_name_re) is None:
+                cookie_re = _init_cookie_name_re(cookie_name)
+                self._cookie_name_re = cookie_re
+            cookie = cookie_re.sub("", cookie).strip("; ")
+        return USER_TOKEN_COOKIE_RE.sub("", cookie).strip("; ")
 
 
 class IngressStore:
@@ -66,10 +72,12 @@ class IngressStore:
     def __init__(self):
         self._configs: dict[str, IngressCfg] = {}
         self._tokens: dict[str, IngressCfg] = {}
+        self._user_tokens: dict[str, dict] = {}
 
     def clear(self):
         self._configs.clear()
         self._tokens.clear()
+        self._user_tokens.clear()
 
     def get(self, name: str) -> IngressCfg | None:
         return self._configs.get(name)
@@ -82,7 +90,10 @@ class IngressStore:
     def add_ingress(self, cfg: IngressCfg, now: int):
         self.del_ingress(cfg.name)
         cfg.token["value"] = ""
-        self.new_token(cfg, now)
+        if cfg.mode not in INGRESS_MODES or cfg.static_token:
+            self.new_token(cfg, now)
+        else:
+            cfg.cookie_name = USER_TOKEN_COOKIE_NAME
         self._configs[cfg.name] = cfg
 
     def new_token(self, cfg: IngressCfg, now: int) -> str:
@@ -117,6 +128,41 @@ class IngressStore:
                 hass.bus.async_fire(EVENT_PANELS_UPDATED)
         return cfg, token
 
+    def generate_user_token(self, user_info: dict) -> str:
+        """Generate a token associated with user info."""
+        now = int(time.time())
+        for token in [k for k, v in self._user_tokens.items() if now >= v["expire"]]:
+            self._user_tokens.pop(token, None)
+        while True:
+            token = base64.urlsafe_b64encode(os.urandom(33)).decode()
+            if token not in self._user_tokens:
+                break
+        self._user_tokens[token] = {"user_info": user_info, "expire": now + USER_TOKEN_VALIDITY}
+        return token
+
+    def check_user_token(self, token: str) -> "UserInfo | None":
+        """Check if a token is valid and return associated user info."""
+        entry = self._user_tokens.get(token)
+        if not entry:
+            return None
+        now = int(time.time())
+        if now >= entry["expire"]:
+            # Token expired, remove it
+            self._user_tokens.pop(token, None)
+            return None
+        # Refresh expiration
+        entry["expire"] = now + USER_TOKEN_VALIDITY
+        return entry["user_info"]
+
     def cookie_name(self, name: str) -> str:
         cfg = self._configs.get(name)
         return cfg.cookie_name if cfg else IngressCfg.cookie_name
+
+
+def _init_cookie_name_re(cookie_name):
+    return re.compile(rf"(?:^|;\s*){re.escape(cookie_name)}=[^;]*(?=;|$)")
+
+
+USER_TOKEN_VALIDITY = 300
+USER_TOKEN_COOKIE_NAME = "ha_ingress_session"
+USER_TOKEN_COOKIE_RE = _init_cookie_name_re(USER_TOKEN_COOKIE_NAME)

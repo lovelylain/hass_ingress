@@ -31,6 +31,7 @@ from .const import (
 )
 from .config import IngressStore, IngressCfg, RewriteCfg
 from .ingress import IngressView, std_header_name
+from .websocket_api import async_register_websocket_api
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant, ServiceCall
@@ -216,6 +217,9 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
         config = IngressStore()
         hass.http.register_view(IngressView(hass, config, async_get_clientsession(hass)))
 
+        # register websocket api
+        await async_register_websocket_api(hass)
+
         # register reload config
         async def reload_config(call: "ServiceCall"):
             data: DomainData = hass.data[DOMAIN]
@@ -304,7 +308,7 @@ def _parse_config(
             ingress_cfg = IngressCfg(**ingress_cfg)
             cfgs.append(ingress_cfg)
             # init frontend config
-            cfg = {"token": ingress_cfg.token, "index": data[CONF_INDEX].lstrip("/")}
+            cfg = {"name": name, "token": ingress_cfg.token, "index": data[CONF_INDEX].lstrip("/")}
             if work_mode == WorkMode.AUTH:
                 cfg["url"] = front_url
                 cfg["field"] = ingress_cfg.cookie_name
