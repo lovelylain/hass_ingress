@@ -12,16 +12,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import urlencode, quote
 from yarl import URL
 
-from .const import (
-    DOMAIN,
-    LOGGER as _LOGGER,
-    API_BASE,
-    URL_BASE,
-    INGRESS_MODES,
-    WorkMode,
-    UIMode,
-    RewriteMode,
-)
+from .const import DOMAIN, LOGGER as _LOGGER, API_BASE, URL_BASE, WorkMode, UIMode, RewriteMode
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -39,6 +30,7 @@ HEADER_USER_ID_PH = "$user_id"
 HEADER_USER_NAME_PH = "$user_name"
 HEADER_USERNAME_PH = "$username"
 
+INGRESS_MODES = (WorkMode.INGRESS, WorkMode.SUBAPP)
 METH_ALLOW_REDIRECT = (hdrs.METH_GET, hdrs.METH_HEAD)
 
 INIT_HEADERS_FILTER = {
@@ -188,13 +180,18 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                 )
             raise resp
 
-        user = None
         if not cfg:
             token = request.cookies.get(self._config.cookie_name(name), "")
-            if user := self._config.check_user_token(token):
-                cfg = self._config.get(name)
-            else:
-                cfg = self._config.check_token(self._hass, token, False)[0]
+            cfg = self._config.check_token(self._hass, token, False)[0]
+
+        user: UserInfo | None = None
+        if cfg and cfg.mode in INGRESS_MODES:
+            user = self._config.check_user_token(
+                request.cookies.get(self._config.user_cookie_name(), "")
+            )
+            if not user and not cfg.static_token:
+                cfg = None
+
         if not cfg or cfg.mode not in INGRESS_MODES:
             # cookie invalid, try redirect to entry
             if cfg := cfg or self._config.get(name):
@@ -374,17 +371,16 @@ def _init_header(
                 continue
         headers[name] = value
     for name, value in cfg.headers.items():
-        if user is not None:
-            if value == HEADER_USERNAME_PH:
-                headers[name] = str(user["username"])
-                continue
-            elif value == HEADER_USER_ID_PH:
-                headers[name] = user["id"]
-                continue
-            elif value == HEADER_USER_NAME_PH:
-                headers[name] = str(user["name"])
-                continue
-        if value != HEADER_AUTO_PH:
+        if value == HEADER_USERNAME_PH:
+            if value := user["username"] if user else None:
+                headers[name] = value
+        elif value == HEADER_USER_ID_PH:
+            if value := user["id"] if user else None:
+                headers[name] = value
+        elif value == HEADER_USER_NAME_PH:
+            if value := user["name"] if user else None:
+                headers[name] = value
+        elif value != HEADER_AUTO_PH:
             headers[name] = value
 
     # Ingress information

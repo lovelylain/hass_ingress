@@ -46,6 +46,3 @@ class RewriteMode(StrEnum):
 class ConfMode(StrEnum):
     AGENT = "agent"
     YAML = "yaml"
-
-
-INGRESS_MODES: "Final" = (WorkMode.INGRESS, WorkMode.SUBAPP)

@@ -5,7 +5,7 @@ import re
 import time
 from typing import TYPE_CHECKING
 
-from .const import LOGGER as _LOGGER, INGRESS_MODES
+from .const import LOGGER as _LOGGER
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -58,11 +58,10 @@ class IngressCfg:
         self.token: "Token" = {"value": "", "expire": 0}
 
     def remove_token_from_cookie(self, cookie):
-        if (cookie_name := self.cookie_name) != USER_TOKEN_COOKIE_NAME:
-            if (cookie_re := self._cookie_name_re) is None:
-                cookie_re = _init_cookie_name_re(cookie_name)
-                self._cookie_name_re = cookie_re
-            cookie = cookie_re.sub("", cookie).strip("; ")
+        if (cookie_re := self._cookie_name_re) is None:
+            cookie_re = _init_cookie_name_re(self.cookie_name)
+            self._cookie_name_re = cookie_re
+        cookie = cookie_re.sub("", cookie).strip("; ")
         return USER_TOKEN_COOKIE_RE.sub("", cookie).strip("; ")
 
 
@@ -90,10 +89,7 @@ class IngressStore:
     def add_ingress(self, cfg: IngressCfg, now: int):
         self.del_ingress(cfg.name)
         cfg.token["value"] = ""
-        if cfg.mode not in INGRESS_MODES or cfg.static_token:
-            self.new_token(cfg, now)
-        else:
-            cfg.cookie_name = USER_TOKEN_COOKIE_NAME
+        self.new_token(cfg, now)
         self._configs[cfg.name] = cfg
 
     def new_token(self, cfg: IngressCfg, now: int) -> str:
@@ -153,6 +149,9 @@ class IngressStore:
         # Refresh expiration
         entry["expire"] = now + USER_TOKEN_VALIDITY
         return entry["user_info"]
+
+    def user_cookie_name(self) -> str:
+        return USER_TOKEN_COOKIE_NAME
 
     def cookie_name(self, name: str) -> str:
         cfg = self._configs.get(name)

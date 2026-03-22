@@ -308,7 +308,7 @@ def _parse_config(
             ingress_cfg = IngressCfg(**ingress_cfg)
             cfgs.append(ingress_cfg)
             # init frontend config
-            cfg = {"name": name, "token": ingress_cfg.token, "index": data[CONF_INDEX].lstrip("/")}
+            cfg = {"token": ingress_cfg.token, "index": data[CONF_INDEX].lstrip("/")}
             if work_mode == WorkMode.AUTH:
                 cfg["url"] = front_url
                 cfg["field"] = ingress_cfg.cookie_name
