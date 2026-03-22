@@ -6,6 +6,7 @@ import {
   ensureHaElem,
 } from "./ha-interfaces";
 import { fetchHassioAddonInfo, ingressSession } from "./hassio-ingress";
+import { haIngressSession } from "./ha-ingress-session";
 import { enableSidebarSwipe } from "./hass-sidebar-swipe";
 import { mdiCoffeeOutline } from "@mdi/js";
 
@@ -14,7 +15,7 @@ const getHassioAddonUrl = async (
   elem: HTMLElement,
   hass: HomeAssistant,
   addonSlug: string,
-  dryRun?: boolean
+  dryRun?: boolean,
 ): Promise<string | undefined> => {
   const showError = (msg: string): undefined => {
     if (!dryRun) (elem.shadowRoot || elem).innerHTML = `<pre>${msg}</pre>`;
@@ -49,6 +50,7 @@ interface IngressPanelConfig {
   url?: string | IngressPanelUrlInfo;
   index?: string;
   addon?: string;
+  name?: string;
   token?: { value: string };
   ui_mode?: string;
   field?: string;
@@ -125,7 +127,7 @@ class HaPanelIngress extends HTMLElement {
   private async _getTargetUrl(
     config: IngressPanelConfig,
     props: CustomPanelProperties,
-    dryRun?: boolean
+    dryRun?: boolean,
   ) {
     let targetUrl = "";
     const urlParams = new URLSearchParams(window.location.search);
@@ -142,13 +144,18 @@ class HaPanelIngress extends HTMLElement {
         }
       }
     } else if (isIngress) {
-      targetUrl = `/api/ingress/${config.token!.value}`;
+      const token = config.token!.value;
       if (addonSlug) {
         const url = await getHassioAddonUrl(this, props.hass!, addonSlug, dryRun);
         if (!url) {
           return;
         }
         targetUrl = url;
+      } else if (token) {
+        targetUrl = `/api/ingress/${token}`;
+      } else {
+        await haIngressSession.init(props.hass!);
+        targetUrl = `/api/ingress/${config.name}`;
       }
     } else {
       targetUrl = urlInfo;
@@ -201,7 +208,7 @@ class HaPanelIngress extends HTMLElement {
   private async _createIngressView(
     targetUrl: string,
     config: IngressPanelConfig,
-    props: CustomPanelProperties
+    props: CustomPanelProperties,
   ) {
     const forwardProps = (elem: any, keys: string[]) => {
       if ("setProperties" in elem) {
