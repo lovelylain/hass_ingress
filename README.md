@@ -12,6 +12,8 @@ v1.2.4 Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch ta
 
 v1.2.5 Feature: [Static Token](#static-token) public links that never expire.
 
+v1.3.0 Feature: [User Info](#user-info) support user info in headers.
+
 Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/), `hass_ingress` extracts this feature into a standalone integration, it allows you to add additional ingress panels to your Home Assistant frontend. The panels are listed in the sidebar and can contain external resources like the web frontend of your router, your monitoring system, or your media server. Home Assistant will take care of the authentication and the secure connection, so users can access the external resources without extra login.
 
 ![overview](images/overview.png)
@@ -205,4 +207,18 @@ ingress:
     work_mode: ingress
     url:
     static_token: secret-token-value-for-nodered_webhook
+```
+
+## User Info
+
+Starting from v1.3.0, the token generation method has been changed to be associated with the user rather than the application, and user information can be used in headers.
+
+```yaml
+ingress:
+  foobar:
+    headers:
+      # $user_id is user.id
+      # $user_name is Name of user
+      # $username is user login name
+      Remote-User: $username
 ```
