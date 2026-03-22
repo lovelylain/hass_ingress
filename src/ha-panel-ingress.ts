@@ -50,7 +50,6 @@ interface IngressPanelConfig {
   url?: string | IngressPanelUrlInfo;
   index?: string;
   addon?: string;
-  name?: string;
   token?: { value: string };
   ui_mode?: string;
   field?: string;
@@ -151,11 +150,9 @@ class HaPanelIngress extends HTMLElement {
           return;
         }
         targetUrl = url;
-      } else if (token) {
-        targetUrl = `/api/ingress/${token}`;
       } else {
         await haIngressSession.init(props.hass!);
-        targetUrl = `/api/ingress/${config.name}`;
+        targetUrl = `/api/ingress/${token}`;
       }
     } else {
       targetUrl = urlInfo;
