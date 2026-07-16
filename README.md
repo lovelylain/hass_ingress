@@ -98,19 +98,19 @@ ingress:
       http-auth-pass: !secret openwrt_auth
     # "fix" absolute URLs by rewriting the response body
     rewrite:
-      # for HTML response
+      # targets the headers
+      - mode: header
+        name: "(Location|Set-Cookie)"
+        match: /(luci-static|cgi-bin)/
+        replace: $http_x_ingress_path/\1/
+      # targets the HTML
       - mode: body
         match: /(luci-static|cgi-bin)/
         replace: $http_x_ingress_path/\1/
-      # for JS init code
+      # targets JS, extra `\` compared to HTML
       - mode: body
         match: \\/(luci-static|cgi-bin|ubus)\\/
         replace: $http_x_ingress_path\/\1\/
-      # for login response
-      - mode: header
-        name: "(Location|Set-Cookie)"
-        match: /cgi-bin/
-        replace: $http_x_ingress_path/cgi-bin/
 ```
 
 After you modify the Ingress configuration, you can go to `developer-tools` page and click `INGRESS` to reload without restarting HA.
