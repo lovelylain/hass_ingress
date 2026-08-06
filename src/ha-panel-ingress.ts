@@ -66,6 +66,10 @@ class HaPanelIngress extends HTMLElement {
   }
 
   public connectedCallback() {
+    this.style.display = "block";
+    this.style.height = "100vh";
+    this.style.height = "100dvh";
+
     if (this._isHassio) {
       ingressSession.init(this._isHassio);
     }
