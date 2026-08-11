@@ -1,0 +1,102 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., 1.2.3)"
+        required: true
+      prerelease:
+        description: "Mark this release as a pre-release"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  update-version-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install dependencies
+        run: pip install packaging
+
+      - name: Check and Update version
+        id: check_version
+        run: |
+          FILE="custom_components/ingress/manifest.json"
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          INPUT_VERSION="${INPUT_VERSION#v}"
+
+          # Pass variables via environment to avoid breaking python syntax
+          export FILE_PATH="$FILE"
+          export INPUT_VER_STR="$INPUT_VERSION"
+
+          # Safely execute python script using standard heredoc syntax
+          python3 << 'EOF'
+          import json, os
+          from packaging import version
+
+          file_path = os.environ['FILE_PATH']
+          input_ver_str = os.environ['INPUT_VER_STR']
+
+          with open(file_path, 'r') as f:
+              data = json.load(f)
+
+          current_ver_str = data.get('version', '0.0.0')
+
+          print(f"Current version in manifest: {current_ver_str}")
+          print(f"Input version: {input_ver_str}")
+
+          github_env = os.environ['GITHUB_ENV']
+          if version.parse(current_ver_str) >= version.parse(input_ver_str):
+              print("SKIPPED: Current version is greater than or equal to input version.")
+              with open(github_env, 'a') as env_file:
+                  env_file.write("SKIP_RELEASE=true\n")
+          else:
+              print("Proceeding with version bump...")
+              with open(github_env, 'a') as env_file:
+                  env_file.write("SKIP_RELEASE=false\n")
+          EOF
+
+          if [ "$SKIP_RELEASE" = "true" ]; then
+            exit 0
+          fi
+
+          echo "Updating $FILE version to: $INPUT_VERSION"
+          sed -i -E "s/(\"version\"[[:space:]]*:[[:space:]]*\")[^\"]+(\")/\1$INPUT_VERSION\2/" "$FILE"
+
+          echo "TARGET_VERSION=$INPUT_VERSION" >> $GITHUB_ENV
+
+          git add "$FILE"
+          git config --global user.email "$(git log -n1 --pretty=format:'%ae')"
+          git config --global user.name "$(git log -n1 --pretty=format:'%an')"
+          git commit -m "chore: bump manifest version to $INPUT_VERSION"
+
+      - name: Push changes
+        if: env.SKIP_RELEASE != 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}
+
+      - name: Create GitHub Release
+        if: env.SKIP_RELEASE != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 2
+          git log -n 1 --skip=1 --oneline --pretty=format:"%s" > changelog.txt
+          ARGS="--target ${{ github.ref_name }} --notes-file changelog.txt"
+          if [ "${{ github.event.inputs.prerelease }}" = "true" ]; then
+            ARGS="$ARGS --prerelease"
+          fi
+          gh release create "${{ env.TARGET_VERSION }}" $ARGS
