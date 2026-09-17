@@ -464,6 +464,7 @@ def _parse_config(
             sidebar_icon=icon,
             require_admin=data[panel_custom.CONF_REQUIRE_ADMIN],
             embed_iframe=False,
+            handle_safe_area=True,
             config=cfg,
         )
 
