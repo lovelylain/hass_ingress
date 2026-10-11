@@ -14,6 +14,8 @@ v1.2.5 Feature: [Static Token](#static-token) public links that never expire.
 
 v1.3.0 Feature: [User Info](#user-info) support user info in headers.
 
+v1.4.0 Feature: Responses proxied by ingress are compressed (gzip/deflate) at the HA border, matching the behavior of the native Hass.io ingress.
+
 Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/), `hass_ingress` extracts this feature into a standalone integration, it allows you to add additional ingress panels to your Home Assistant frontend. The panels are listed in the sidebar and can contain external resources like the web frontend of your router, your monitoring system, or your media server. Home Assistant will take care of the authentication and the secure connection, so users can access the external resources without extra login.
 
 ![overview](images/overview.png)

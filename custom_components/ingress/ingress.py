@@ -36,6 +36,7 @@ METH_ALLOW_REDIRECT = (hdrs.METH_GET, hdrs.METH_HEAD)
 INIT_HEADERS_FILTER = {
     hdrs.CONTENT_LENGTH,
     hdrs.CONTENT_ENCODING,
+    hdrs.ACCEPT_ENCODING,  # Avoid local compression, as we will compress at the border
     hdrs.TRANSFER_ENCODING,
     hdrs.SEC_WEBSOCKET_EXTENSIONS,
     hdrs.SEC_WEBSOCKET_PROTOCOL,
@@ -50,6 +51,8 @@ RESPONSE_HEADERS_FILTER = {
 }
 
 MAX_SIMPLE_REQUEST_SIZE = 4194000
+MAX_SIMPLE_RESPONSE_SIZE = 4194000
+MIN_COMPRESSED_SIZE = 128
 
 DISABLED_TIMEOUT = aiohttp.ClientTimeout(total=None)
 
@@ -280,7 +283,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             allow_redirects=False,
             data=data,
             timeout=DISABLED_TIMEOUT,
-            skip_auto_headers={hdrs.CONTENT_TYPE},
+            skip_auto_headers={hdrs.CONTENT_TYPE, hdrs.ACCEPT_ENCODING},
         ) as result:
             headers = _response_header(result)
             if ctype := result.headers.get(hdrs.CONTENT_TYPE):
@@ -306,25 +309,66 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                         rewrite_body = _make_rewrite(rule, rewrite_body)
 
             headers = CIMultiDict((k, v) for k, vs in headers.items() for v in vs if v)
-            # Simple request
-            if rewrite_body or must_be_empty_body(request.method, result.status):
-                # Return Response
+
+            # Empty body responses (304, 204, HEAD, etc.) should not be streamed,
+            # otherwise aiohttp may generate an invalid "0\r\n\r\n" chunk.
+            # This also avoids setting content_type for empty responses.
+            if must_be_empty_body(request.method, result.status):
+                # If upstream contains content-type, preserve it (e.g. for HEAD requests)
+                if ctype != "application/octet-stream":
+                    headers[hdrs.CONTENT_TYPE] = ctype
+                return web.Response(headers=headers, status=result.status)
+
+            # Simple request: buffer small bodies so they can be compressed in one pass.
+            # NOTE: with auto_decompress the upstream Content-Length is the compressed size,
+            # so this may still expand; the size floor below applies to the real body length.
+            content_length = result.headers.get(hdrs.CONTENT_LENGTH)
+            use_buffered = rewrite_body is not None or (
+                content_length is not None and int(content_length) <= MAX_SIMPLE_RESPONSE_SIZE
+            )
+            if use_buffered:
                 body = await result.read()
                 if rewrite_body:
                     body = rewrite_body(body)
-                return web.Response(
-                    headers=headers, status=result.status, content_type=ctype, body=body
+                # 206 carries Content-Range offsets into the identity representation;
+                # re-encoding the body would corrupt range assembly.
+                compress = (
+                    len(body) > MIN_COMPRESSED_SIZE
+                    and result.status != 206
+                    and _should_compress(ctype)
                 )
+                if compress:
+                    headers.add(hdrs.VARY, hdrs.ACCEPT_ENCODING)
+                simple_response = web.Response(
+                    headers=headers,
+                    status=result.status,
+                    content_type=ctype,
+                    body=body,
+                    zlib_executor_size=32768,
+                )
+                if compress:
+                    simple_response.enable_compression()
+                return simple_response
 
             # Stream response
+            compress = result.status != 206 and _should_compress(ctype)
+            if compress:
+                headers.add(hdrs.VARY, hdrs.ACCEPT_ENCODING)
             response = web.StreamResponse(status=result.status, headers=headers)
             response.content_type = ctype
+            if compress:
+                response.enable_compression()
 
             try:
                 await response.prepare(request)
                 async for data, _ in result.content.iter_chunks():
                     await response.write(data)
-            except (aiohttp.ClientError, aiohttp.ClientPayloadError, ConnectionResetError) as err:
+            except (
+                aiohttp.ClientError,
+                aiohttp.ClientPayloadError,
+                ConnectionResetError,
+                ConnectionError,
+            ) as err:
                 _LOGGER.debug("Stream error with %s / %s: %s", cfg.name, url, err)
             return response
 
@@ -422,6 +466,17 @@ def _response_header(response: aiohttp.ClientResponse) -> dict[str, list[str]]:
             continue
         headers.setdefault(name, []).append(value)
     return headers
+
+
+def _should_compress(content_type: str) -> bool:
+    """Return if we should compress a response."""
+    if content_type.startswith("text/event-stream"):
+        return False
+    if content_type.startswith("image/"):
+        return "svg" in content_type
+    if content_type.startswith("application/"):
+        return "json" in content_type or "xml" in content_type or "javascript" in content_type
+    return not content_type.startswith(("video/", "audio/", "font/"))
 
 
 def _is_websocket(request: web.Request) -> bool:
