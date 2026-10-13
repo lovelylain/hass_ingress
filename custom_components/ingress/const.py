@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 
 DOMAIN: "Final" = "ingress"
-CONF_PANELS: "Final" = "panels"
 LOGGER: "Final" = logging.getLogger(__package__)
 
 API_BASE: "Final" = "/api/ingress"

@@ -19,7 +19,7 @@
         "data": {
           "mode": "配置模式"
         },
-        "description": "Local UI: manage panels here without an agent or YAML. After setup, choose Configure to add panels.\nAgent: connect to an already running external ingress agent.\nYAML: manage panels in configuration.yaml.",
+        "description": "Local UI: each ingress appears on its own integration row. After setup, choose Add ingress.\nAgent: connect to an already running external ingress agent.\nYAML: manage panels in configuration.yaml.",
         "title": "Ingress"
       }
     }

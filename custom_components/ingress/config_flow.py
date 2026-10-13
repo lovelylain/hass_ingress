@@ -19,8 +19,9 @@ try:
 except ImportError:
     import voluptuous as vol
 
-from . import CONFIG_SCHEMA
-from .const import CONF_PANELS, DOMAIN, ConfMode, RewriteMode, UIMode, WorkMode
+from . import (CONFIG_SCHEMA, CONF_SHOW_IN_SIDEBAR, CONF_UI_CONFIGURED,
+               _active_panels, _panel_subentry, _subentry_panels)
+from .const import DOMAIN, ConfMode, RewriteMode, UIMode, WorkMode
 
 CONNECT_TIMEOUT = 10
 DEFAULT_URL = "ha-ingress:8080"
@@ -72,7 +73,8 @@ def _panel_schema(editing=False):
     fields = {} if editing else {vol.Required("slug"): text}
     fields.update(
         {
-            vol.Optional("title"): text,
+            vol.Required("title"): text,
+            vol.Required(CONF_SHOW_IN_SIDEBAR, default=True): selector.BooleanSelector(),
             vol.Optional("icon"): selector.IconSelector(),
             vol.Required("url"): text,
             vol.Required("require_admin", default=False): selector.BooleanSelector(),
@@ -117,7 +119,7 @@ def _panel_form(panel):
 
 def _panel_from_form(user_input):
     """Convert graphical rows to the integration's existing configuration."""
-    panel = {key: value for key, value in user_input.items() if key not in ("slug", "advanced") and value != ""}
+    panel = {key: value for key, value in user_input.items() if key not in ("slug", "advanced", CONF_SHOW_IN_SIDEBAR) and value != ""}
     panel.update({key: value for key, value in user_input.get("advanced", {}).items() if value not in ("", None)})
     if "headers" in panel:
         rows = panel["headers"]
@@ -238,16 +240,16 @@ def _validate_panels(hass, panels):
 class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Ingress config flow."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._data = {}
         self._snapshot = None
 
-    @staticmethod
+    @classmethod
     @callback
-    def async_get_options_flow(config_entry):
-        return IngressOptionsFlow()
+    def async_get_supported_subentry_types(cls, config_entry):
+        return {"panel": IngressPanelFlow}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Select local UI, external agent, or YAML configuration."""
@@ -259,7 +261,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_my_agent()
             if self._data[CONF_MODE] == ConfMode.UI and self._snapshot is not None:
                 entry = self._get_reconfigure_entry()
-                if entry.data[CONF_MODE] == ConfMode.YAML and CONF_PANELS not in entry.options:
+                if entry.data[CONF_MODE] == ConfMode.YAML and not entry.data.get(CONF_UI_CONFIGURED):
                     return await self.async_step_import_yaml()
             return await self.async_step_my_setup()
         return self.async_show_form(
@@ -302,21 +304,25 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_my_setup(self, panels=None):
         if entries := self._async_current_entries():
             entry = entries[0]
-            if self._snapshot != (dict(entry.data), dict(entry.options)):
+            if self._snapshot != _entry_snapshot(entry):
                 return self.async_abort(reason="configuration_changed")
-            options = dict(entry.options)
             if panels is not None:
-                options[CONF_PANELS] = panels
-            elif self._data[CONF_MODE] == ConfMode.UI:
-                options.setdefault(CONF_PANELS, {})
-            return self.async_update_reload_and_abort(entry, data=self._data, options=options, reason="reconfigure_successful")
-        options = {CONF_PANELS: {}} if self._data[CONF_MODE] == ConfMode.UI else {}
-        return self.async_create_entry(title=DEFAULT_TITLE, data=self._data, options=options)
+                for slug, panel in panels.items():
+                    self.hass.config_entries.async_add_subentry(entry, _panel_subentry(slug, panel))
+            if self._data[CONF_MODE] == ConfMode.UI:
+                self._data[CONF_UI_CONFIGURED] = True
+            result = self.async_update_and_abort(entry, data=self._data, reason="reconfigure_successful")
+            if not entry.update_listeners:
+                self.hass.config_entries.async_schedule_reload(entry.entry_id)
+            return result
+        if self._data[CONF_MODE] == ConfMode.UI:
+            self._data[CONF_UI_CONFIGURED] = True
+        return self.async_create_entry(title=DEFAULT_TITLE, data=self._data)
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
         entry = self._get_reconfigure_entry()
         self._data = deepcopy(dict(entry.data))
-        self._snapshot = deepcopy((dict(entry.data), dict(entry.options)))
+        self._snapshot = _entry_snapshot(entry)
         return await self.async_step_user(user_input)
 
     async def async_step_import_yaml(self, user_input=None):
@@ -350,85 +356,65 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return await self.async_step_my_setup()
 
 
-class IngressOptionsFlow(config_entries.OptionsFlowWithReload):
-    """Add, edit, or remove one panel per options flow."""
+def _entry_snapshot(entry):
+    return deepcopy((dict(entry.data), dict(entry.options), {key: value.as_dict() for key, value in entry.subentries.items()}))
 
-    async def async_step_init(self, user_input=None):
-        mode = self.config_entry.data[CONF_MODE]
-        if mode != ConfMode.UI:
-            return self.async_abort(reason="agent_options" if mode == ConfMode.AGENT else "yaml_options")
-        self._snapshot = deepcopy((dict(self.config_entry.data), dict(self.config_entry.options)))
-        self._options = deepcopy(dict(self.config_entry.options))
-        self._panels = self._options.setdefault(CONF_PANELS, {})
+
+class IngressPanelFlow(config_entries.ConfigSubentryFlow):
+    """Configure a panel directly from its integration row."""
+
+    def __init__(self):
+        self._snapshot = None
         self._slug = None
-        return self.async_show_menu(step_id="init", menu_options=["add", "edit", "remove"] if self._panels else ["add"])
 
-    async def async_step_add(self, user_input=None):
-        return await self._async_panel("add", user_input)
+    async def async_step_user(self, user_input=None):
+        return await self._async_panel("user", user_input)
 
-    async def async_step_edit(self, user_input=None):
-        if self._slug is None:
-            if user_input is None:
-                return self._select_panel("edit")
-            self._slug = user_input["panel"]
-            user_input = None
-        return await self._async_panel("edit", user_input)
-
-    def _select_panel(self, step_id):
-        return self.async_show_form(
-            step_id=step_id,
-            data_schema=vol.Schema({vol.Required("panel"): _select([{"value": slug, "label": f"{panel.get('title', slug)} ({slug})"} for slug, panel in self._panels.items()])}),
-        )
+    async def async_step_reconfigure(self, user_input=None):
+        if self._snapshot is None:
+            self._slug = self._get_reconfigure_subentry().unique_id
+        return await self._async_panel("reconfigure", user_input)
 
     async def _async_panel(self, step_id, user_input):
+        entry = self._get_entry()
+        if self._snapshot is None:
+            self._snapshot = _entry_snapshot(entry)
+        elif self._snapshot != _entry_snapshot(entry):
+            return self.async_abort(reason="configuration_changed")
+        if entry.data[CONF_MODE] != ConfMode.UI:
+            return self.async_abort(reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels")
+        panels = _subentry_panels(entry)
         errors = {}
         if user_input is not None:
-            slug = self._slug if step_id == "edit" else user_input["slug"]
-            if step_id == "add" and slug in self._panels:
+            slug = self._slug if step_id == "reconfigure" else user_input["slug"]
+            if step_id == "user" and slug in panels:
                 errors["slug"] = "duplicate_panel"
             else:
                 try:
                     panel = _panel_from_form(user_input)
-                    panels = _validate_panels(self.hass, self._panels | {slug: panel})
+                    if not panel.get("title", "").strip():
+                        raise InvalidPanel("invalid_panel")
+                    candidate, unavailable = _active_panels(panels | {slug: panel})
+                    if slug in unavailable:
+                        raise InvalidPanel("invalid_parent")
+                    panel = _validate_panels(self.hass, candidate)[slug]
                 except InvalidPanel as err:
                     errors["base"] = str(err)
                 else:
-                    self._panels.clear()
-                    self._panels.update(panels)
-                    return self._save()
+                    title = panel.pop("title")
+                    panel[CONF_SHOW_IN_SIDEBAR] = user_input.get(CONF_SHOW_IN_SIDEBAR, True)
+                    if step_id == "reconfigure":
+                        return self.async_update_and_abort(entry, self._get_reconfigure_subentry(), title=title, data=panel)
+                    return self.async_create_entry(title=title, data=panel, unique_id=slug)
         suggested = user_input
         if suggested is None and self._slug is not None:
-            suggested = _panel_form(self._panels[self._slug])
+            subentry = self._get_reconfigure_subentry()
+            panel = deepcopy(dict(subentry.data))
+            visible = panel.pop(CONF_SHOW_IN_SIDEBAR, True)
+            suggested = _panel_form(panel | {"title": subentry.title}) | {CONF_SHOW_IN_SIDEBAR: visible}
         return self.async_show_form(
             step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(_panel_schema(step_id == "edit"), suggested),
+            data_schema=self.add_suggested_values_to_schema(_panel_schema(step_id == "reconfigure"), suggested),
             errors=errors,
             description_placeholders={"slug": self._slug or ""},
         )
-
-    async def async_step_remove(self, user_input=None):
-        if user_input is None:
-            return self._select_panel("remove")
-        self._slug = user_input["panel"]
-        return await self.async_step_remove_confirm()
-
-    async def async_step_remove_confirm(self, user_input=None):
-        errors = {}
-        if any(panel.get("parent") == self._slug for panel in self._panels.values()):
-            errors["base"] = "parent_has_children"
-        elif user_input is not None:
-            if not user_input["confirm"]:
-                return self.async_abort(reason="remove_cancelled")
-            del self._panels[self._slug]
-            return self._save()
-        return self.async_show_form(
-            step_id="remove_confirm",
-            data_schema=vol.Schema({vol.Required("confirm", default=False): selector.BooleanSelector()}),
-            description_placeholders={"slug": self._slug},
-            errors=errors,
-        )
-
-    def _save(self):
-        if self._snapshot != (dict(self.config_entry.data), dict(self.config_entry.options)):
-            return self.async_abort(reason="configuration_changed")
-        return self.async_create_entry(title="", data=self._options)

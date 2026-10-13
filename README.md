@@ -70,16 +70,22 @@ Home Assistant once, then:
 
 1. Open **Settings → Devices & services → Add integration** and select **Ingress**.
 2. Select **Local UI** as the configuration mode.
-3. Open **Configure** on the Ingress integration and select **Add panel**.
-4. Enter a panel identifier, its sidebar title, and its URL. For example, for a
+3. Open the Ingress integration and select **Add ingress**.
+4. Enter a panel identifier, its name, and its URL. For example, for a
    Node-RED server listening at `http://127.0.0.1:45180`, use identifier `nodered`,
    title `Node-RED`, and that URL. Use your own server's address as reachable from
    Home Assistant. Choose an icon and administrator-only sidebar visibility if needed.
 5. Save. The panel appears without restarting Home Assistant.
 
-Use **Configure → Edit panel** or **Remove panel** to manage existing panels.
-Panel identifiers stay fixed when editing because they are used in access URLs
-and parent relationships. Remove a panel's children before removing their parent.
+Each ingress appears on its own integration row. Use its settings button to edit
+it, or its menu to rename or delete it. The row's name also names the panel;
+**Show in sidebar** controls its top-level sidebar visibility. No device or entity
+is created. Identifiers stay fixed because access URLs and parent relationships
+use them.
+
+Deleting a parent keeps its children's settings but disables their routes and
+tokens. Home Assistant shows a repair issue. Add the parent again with the same
+identifier, or edit the affected rows to choose another valid parent.
 
 The collapsed **Advanced** section includes work and display modes, parent panels,
 the index path, token settings, and dynamic URL matching. HTTP headers and response
@@ -95,7 +101,7 @@ The `ingress.reload` action reloads the selected configuration source.
 Open the Ingress integration's menu, choose **Reconfigure**, and select
 **Local UI**. On the first switch, confirm the import to copy the current YAML
 panels into Home Assistant's stored configuration. Cancelling leaves YAML in
-control. After the import, manage panels with **Configure**; the `ingress:` section in
+control. After the import, each panel has its own configuration row; the `ingress:` section in
 `configuration.yaml` is ignored and can be removed.
 
 Later mode switches reuse the saved UI panels rather than importing YAML again.

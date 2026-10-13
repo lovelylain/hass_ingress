@@ -14,8 +14,11 @@ from custom_components.ingress import (
     async_setup_entry,
     async_unload_entry,
     setup_domain,
+    async_migrate_entry,
+    _panel_subentry,
+    _subentry_panels,
 )
-from custom_components.ingress.const import CONF_PANELS, DOMAIN, ConfMode
+from custom_components.ingress.const import DOMAIN, ConfMode
 
 
 @pytest.fixture
@@ -39,7 +42,8 @@ async def test_ui_setup_reload_and_restart(hass, http):
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_MODE: ConfMode.UI},
-        options={CONF_PANELS: deepcopy(saved)},
+        version=2,
+        subentries_data=[_panel_subentry(slug, panel).as_dict() for slug, panel in saved.items()],
     )
     entry.add_to_hass(hass)
     frontend.async_register_built_in_panel(hass, "config")
@@ -53,7 +57,7 @@ async def test_ui_setup_reload_and_restart(hass, http):
         old_token = store.get("router").token["value"]
         old_session = store.generate_user_token({"id": "user"})
         assert store.get("router").rewrites[0].replace == "/api/ingress/router/"
-        assert entry.options[CONF_PANELS] == saved
+        assert _subentry_panels(entry) == saved
 
         assert await async_unload_entry(hass, entry)
         assert "router" not in hass.data[frontend.DATA_PANELS]
@@ -63,9 +67,9 @@ async def test_ui_setup_reload_and_restart(hass, http):
         assert await async_setup_entry(hass, entry)
         assert "router" in hass.data[frontend.DATA_PANELS]
         assert store.get("router").token["value"] != old_token
-        assert entry.options[CONF_PANELS] == saved
+        assert _subentry_panels(entry) == saved
 
-        hass.config_entries.async_update_entry(entry, options={CONF_PANELS: {}})
+        hass.config_entries.async_remove_subentry(entry, next(iter(entry.subentries)))
         await hass.services.async_call(DOMAIN, "reload", blocking=True)
         assert store.get("router") is None
         assert "router" not in hass.data[frontend.DATA_PANELS]
@@ -76,19 +80,16 @@ async def test_ui_setup_reload_and_restart(hass, http):
 async def test_dynamic_url_is_not_mutated(hass, http):
     """Parsing must not modify saved frontend URL rules."""
     entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={CONF_MODE: ConfMode.UI},
-        options={CONF_PANELS: {
-            "router": {
-                CONF_URL: {"match": "hass", "replace": "router", "default": "http://router/"},
-                "work_mode": "iframe",
-            }
-        }},
+        domain=DOMAIN, version=2, data={CONF_MODE: ConfMode.UI},
+        subentries_data=[_panel_subentry("router", {
+            CONF_URL: {"match": "hass", "replace": "router", "default": "http://router/"},
+            "work_mode": "iframe",
+        }).as_dict()],
     )
     entry.add_to_hass(hass)
-    original = deepcopy(dict(entry.options))
+    original = deepcopy(_subentry_panels(entry))
     assert await async_setup_entry(hass, entry)
-    assert entry.options == original
+    assert _subentry_panels(entry) == original
     assert "router" in hass.data[frontend.DATA_PANELS]
 
 
@@ -128,7 +129,7 @@ async def test_yaml_setup_starts_import(hass, http):
 
 async def test_unload_disconnects_agent(hass, http):
     """Unloading also disconnects the agent and removes only owned panels."""
-    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.UI}, options={CONF_PANELS: {}})
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.UI}, version=2)
     assert await async_setup_entry(hass, entry)
     data = hass.data[DOMAIN]
     client = data["client"] = Mock()
@@ -138,3 +139,63 @@ async def test_unload_disconnects_agent(hass, http):
     assert "client" not in data
     assert not data["panels"]
     assert data["config"].get("router") is None
+
+
+async def test_native_rename_sidebar_toggle_and_orphan_recovery(hass, http):
+    from homeassistant.helpers import issue_registry as ir
+
+    panels = {
+        "root": {"url": "root:80", "title": "Root"},
+        "root_child": {"url": "child:80", "parent": "root", "work_mode": "ingress", "title": "Child", "static_token": "child-public"},
+        "root_child_tab": {"url": "tab:80", "parent": "root_child", "work_mode": "subapp", "title": "Tab"},
+        "other": {"url": "other:80", "title": "Other"},
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN, version=2, data={CONF_MODE: ConfMode.UI},
+        subentries_data=[_panel_subentry(slug, panel).as_dict() for slug, panel in panels.items()],
+    )
+    entry.add_to_hass(hass)
+    assert await async_setup_entry(hass, entry)
+    root = next(subentry for subentry in entry.subentries.values() if subentry.unique_id == "root")
+    # Exercise native persistence changes against the real runtime; reload through
+    # the service here because setup is called directly rather than by the manager.
+    with patch.object(hass.config_entries, "async_reload", return_value=True):
+        hass.config_entries.async_update_subentry(entry, root, title="Renamed")
+        await hass.services.async_call(DOMAIN, "reload", blocking=True)
+        assert hass.data[frontend.DATA_PANELS]["root"].sidebar_title == "Renamed"
+        hass.config_entries.async_update_subentry(entry, root, data={**root.data, "show_in_sidebar": False})
+        await hass.services.async_call(DOMAIN, "reload", blocking=True)
+        assert hass.data[frontend.DATA_PANELS]["root"].sidebar_title is None
+        store = hass.data[DOMAIN]["config"]
+        assert store.get("root_child") is not None
+        child_token = store.get("root_child").token["value"]
+        assert store.check_token(hass, child_token)[0] is not None
+        hass.config_entries.async_remove_subentry(entry, root.subentry_id)
+        await hass.services.async_call(DOMAIN, "reload", blocking=True)
+        assert store.get("root") is None and store.get("root_child") is None
+        assert store.get("root_child_tab") is None
+        assert store.check_token(hass, child_token)[0] is None
+        assert store.get("other") is not None
+        assert "root" not in hass.data[frontend.DATA_PANELS]
+        assert len(entry.subentries) == 3
+        issue_id = f"missing_parent_{entry.entry_id}"
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+        hass.config_entries.async_add_subentry(entry, _panel_subentry("root", panels["root"]))
+        await hass.services.async_call(DOMAIN, "reload", blocking=True)
+        assert store.get("root_child") is not None
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+        await hass.async_block_till_done()
+
+
+async def test_migrates_first_trial_panels_once_without_mutating_values(hass):
+    panels = {"hidden": {"url": "app:80", "headers": {"Authorization": "secret"}, "static_token": "public"},
+              "shown": {"url": "shown:80", "title": "Shown"}}
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.UI}, options={"panels": deepcopy(panels)})
+    entry.add_to_hass(hass)
+    assert await async_migrate_entry(hass, entry)
+    assert entry.version == 2 and entry.options == {}
+    assert _subentry_panels(entry) == panels
+    hidden = next(subentry for subentry in entry.subentries.values() if subentry.unique_id == "hidden")
+    assert hidden.title == "hidden" and not hidden.data["show_in_sidebar"]
+    assert await async_migrate_entry(hass, entry)
+    assert len(entry.subentries) == 2
