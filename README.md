@@ -90,6 +90,31 @@ Configuration is stored by Home Assistant and survives restarts. Saving changes
 reloads Ingress and renews its sessions; open panels may need to be refreshed.
 The `ingress.reload` action reloads the selected configuration source.
 
+#### HTTPS certificates
+
+For an HTTPS proxy in `ingress` or `subapp` mode, open its settings and choose
+**Advanced → HTTPS certificate verification**:
+
+- **System trust (recommended)** uses Home Assistant's normal certificate trust.
+- **Trust a provided certificate** requires one or more CA or server certificates
+  pasted into **Trusted certificate(s) in PEM format**, including their
+  `BEGIN CERTIFICATE` and `END CERTIFICATE` lines. Only these certificates are
+  trusted for this panel. Hostname, chain, and expiry verification still apply;
+  an expired certificate or a certificate for another hostname still fails.
+- **Ignore certificate errors (unsafe)** disables server identity verification.
+  Configured credentials can reach an impersonating server. Use this only when
+  you explicitly accept that risk.
+
+These settings apply to this panel's HTTP and WebSocket proxy connections.
+Other panels, including parent and child panels, keep their own settings.
+They do not affect plain HTTP, iframe, auth, or add-on connections. To reset,
+select **System trust** and save; the stored custom certificate is removed.
+
+YAML uses `tls_mode: system` (the default), `custom`, or `disabled` on each panel.
+For `custom`, set `tls_certificate` to a YAML multiline (`|`) string containing
+the PEM certificate(s). Empty or invalid PEM is rejected when the configuration
+is loaded. Do not paste private keys.
+
 ### Move existing YAML panels to the interface
 
 Open the Ingress integration's menu, choose **Reconfigure**, and select
@@ -201,6 +226,8 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
     - **index**: string (optional, default empty) The relative URL of index page. If the `url` is http://127.0.0.1:45180/ui/, all access must be under the /ui/ path; if the `url` is http://127.0.0.1:45180 and the `index` is /ui/, all paths of http://127.0.0.1:45180 can be accessed.
     - **parent**: string (optional, default empty) Parent ingress panel name. If non-empty, this panel will be hidden from the HA sidebar and you can access it via the `/{parent panel_name}/{child panel_name}` link. For example, the parent panel `nodered`, the sub-panel `ui` or `nodered_ui`, you can access the sub-panel through `/nodered/ui`.
     - **headers**: map (optional) Additional http headers passed to the backend service, such as `authorization` for `basic auth`.
+    - **tls_mode**: string (oneof `system` `custom` `disabled`, default: `system`) Certificate verification for this HTTPS ingress or subapp proxy; see [HTTPS certificates](#https-certificates).
+    - **tls_certificate**: string (required for `tls_mode: custom`) One or more PEM CA or server certificates, supplied as a multiline string.
     - **rewrite**: list (optional) List of response body/header rewrite rules:
       - **mode**: string (REQUIRED, oneof `body` `header`) Whether to rewrite response body or headers.
       - **path**: string (optional) URL prefix to apply this rule to, uses RegEx. E.g. `/.*` for everything.

@@ -32,9 +32,13 @@ from .const import (
     UIMode,
     RewriteMode,
     ConfMode,
+    CONF_TLS_MODE,
+    CONF_TLS_CERTIFICATE,
+    TLSMode,
 )
 from .config import IngressStore, IngressCfg, RewriteCfg
 from .ingress import IngressView, std_header_name
+from .tls import tls_context
 from .websocket_api import async_register_websocket_api
 
 if TYPE_CHECKING:
@@ -105,6 +109,8 @@ CONFIG_SCHEMA = vol.Schema(
                     vol.Optional(CONF_STATIC_TOKEN): cv.string,
                     vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
                     vol.Optional(CONF_ENABLE_COMPRESS): cv.boolean,
+                    vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): vol.In(list(TLSMode)),
+                    vol.Optional(CONF_TLS_CERTIFICATE): cv.string,
                 }
             )
         ),
@@ -374,6 +380,7 @@ def _parse_config(
     placeholder = "$http_x_ingress_path"
     entrypoint = f"{URL_BASE}/entrypoint.js?v={VERSION}"
     for name, data in config.get(DOMAIN, {}).items():
+        ssl_policy = tls_context(data)
         cfg: dict[str, Any]
         ingress_cfg = None
         work_mode = data[CONF_WORK_MODE]
@@ -382,7 +389,7 @@ def _parse_config(
             url, front_url = url[CONF_DEFAULT], url
         if work_mode not in (WorkMode.IFRAME, WorkMode.CUSTOM):
             # init backend config
-            ingress_cfg = dict(mode=work_mode, name=name, entry=name)
+            ingress_cfg = dict(mode=work_mode, name=name, entry=name, ssl=ssl_policy)
             ingress_path, sub_path = f"{API_BASE}/{name}", ""
             if work_mode != WorkMode.HASSIO:
                 url = url.replace(placeholder, ingress_path).rstrip("/")

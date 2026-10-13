@@ -132,6 +132,11 @@ async def test_graphical_schema_serializes(hass):
     assert headers["fields"]["value"]["selector"] == {"text": {"type": "password", "multiline": False, "multiple": False}}
     replacement = advanced["rewrite"]["selector"]["object"]["fields"]["replace"]
     assert not replacement.get("required", False)
+    tls_mode = advanced["tls_mode"]
+    assert tls_mode["default"] == "system"
+    assert tls_mode["selector"]["select"]["options"] == ["system", "custom", "disabled"]
+    assert tls_mode["selector"]["select"]["translation_key"] == "tls_mode"
+    assert advanced["tls_certificate"]["selector"]["text"]["multiline"]
 
 
 @pytest.mark.parametrize("replacement", [{}, {"replace": ""}])
@@ -381,3 +386,57 @@ async def test_reconfiguring_unloaded_entry_triggers_reload(hass):
         assert result["reason"] == "reconfigure_successful"
         await hass.async_block_till_done()
         reload.assert_awaited_once_with(entry.entry_id)
+
+
+async def test_tls_subentry_save_reconfigure_reset_and_remove(hass, tls_certificates):
+    entry = add_entry(hass, {"other": {"url": "https://other"}})
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    result = await start_panel(hass, entry)
+    result = await configure_panel(hass, result["flow_id"], {
+        "slug": "app", "url": "https://localhost", "advanced": {
+            "tls_mode": "custom", "tls_certificate": tls_certificates["ca"],
+        },
+    })
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    saved = _subentry_panels(entry)["app"]
+    assert saved["tls_mode"] == "custom"
+    assert saved["tls_certificate"] == tls_certificates["ca"]
+    result = await start_panel(hass, entry, "app")
+    result = await configure_panel(hass, result["flow_id"], _panel_form(saved))
+    assert result["reason"] == "reconfigure_successful"
+    await hass.async_block_till_done()
+    assert _subentry_panels(entry)["app"] == saved
+    for mode in ("disabled", "system"):
+        result = await start_panel(hass, entry, "app")
+        result = await configure_panel(hass, result["flow_id"], {
+            "url": "https://localhost", "advanced": {
+                "tls_mode": mode, "tls_certificate": tls_certificates["ca"],
+            },
+        })
+        assert result["reason"] == "reconfigure_successful"
+        await hass.async_block_till_done()
+        saved = _subentry_panels(entry)["app"]
+        assert saved["tls_mode"] == mode
+        assert "tls_certificate" not in saved
+    assert _subentry_panels(entry)["other"] == {"url": "https://other"}
+    hass.config_entries.async_remove_subentry(entry, get_panel(entry, "app").subentry_id)
+    await hass.async_block_till_done()
+    assert set(_subentry_panels(entry)) == {"other"}
+
+
+@pytest.mark.parametrize("settings,error", [
+    ({"tls_mode": "custom"}, "invalid_tls_certificate"),
+    ({"tls_mode": "custom", "tls_certificate": ""}, "invalid_tls_certificate"),
+    ({"tls_mode": "custom", "tls_certificate": "invalid"}, "invalid_tls_certificate"),
+    ({"tls_mode": "disabled", "work_mode": "iframe"}, "invalid_tls_mode"),
+])
+async def test_tls_subentry_validation(hass, settings, error):
+    entry = add_entry(hass)
+    result = await start_panel(hass, entry)
+    result = await configure_panel(hass, result["flow_id"], {
+        "slug": "app", "url": "https://localhost", "advanced": settings,
+    })
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": error}
+    assert not entry.subentries
