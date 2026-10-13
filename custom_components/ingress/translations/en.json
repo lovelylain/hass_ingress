@@ -35,7 +35,9 @@
       "invalid_parent": "Choose an existing parent without cycles. A subapp needs an ingress parent; other child panels need a top-level parent.",
       "route_conflict": "This panel route is already used by another panel.",
       "duplicate_panel": "A panel with this slug already exists.",
-      "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed."
+      "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed.",
+      "invalid_tls_mode": "TLS options apply only to HTTPS proxies in ingress or subapp mode.",
+      "invalid_tls_certificate": "Paste one or more valid PEM CA or server certificates, including the BEGIN CERTIFICATE and END CERTIFICATE lines."
     },
     "abort": {
       "already_configured": "Ingress is already configured. Add an ingress or use Reconfigure to change the mode.",
