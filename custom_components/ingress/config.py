@@ -2,7 +2,7 @@ import base64
 from homeassistant.components.frontend import EVENT_PANELS_UPDATED  # type: ignore
 import os
 import re
-import ssl
+from ssl import SSLContext
 import time
 from typing import TYPE_CHECKING
 
@@ -52,7 +52,7 @@ class IngressCfg:
     static_token = ""
     rewrites: list[RewriteCfg] = []
     sub_apps: list["IngressCfg"] = []
-    ssl: ssl.SSLContext | bool = True
+    ssl: SSLContext | bool = True
 
     def __init__(self, **kwargs):
         self.__dict__.update(
