@@ -1,3 +1,4 @@
+import aiohttp
 import asyncio
 from copy import deepcopy
 from types import MappingProxyType
@@ -13,7 +14,7 @@ from homeassistant.const import (
     CONF_URL,
 )
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 import os
 import re
@@ -315,7 +316,9 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
 
         # register ingress view
         config = IngressStore()
-        hass.http.register_view(IngressView(hass, config, async_get_clientsession(hass)))
+        # Backend cookies belong to each browser, never to the shared proxy session.
+        websession = async_create_clientsession(hass, cookie_jar=aiohttp.DummyCookieJar())
+        hass.http.register_view(IngressView(hass, config, websession))
 
         # register websocket api
         await async_register_websocket_api(hass)
