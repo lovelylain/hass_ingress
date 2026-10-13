@@ -51,6 +51,13 @@
         "agent": "External agent",
         "yaml": "YAML"
       }
+    },
+    "tls_mode": {
+      "options": {
+        "system": "System trust (recommended)",
+        "custom": "Trust a provided certificate",
+        "disabled": "Ignore certificate errors (unsafe)"
+      }
     }
   },
   "config_subentries": {
@@ -85,11 +92,15 @@
                 "url_match": "Dynamic URL match pattern",
                 "url_replace": "Dynamic URL replacement",
                 "headers": "Request headers",
-                "rewrite": "Response rewrites (in order)"
+                "rewrite": "Response rewrites (in order)",
+                "tls_mode": "HTTPS certificate verification",
+                "tls_certificate": "Trusted certificate(s) in PEM format"
               },
               "data_description": {
                 "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
-                "headers": "Values are stored in the Home Assistant configuration entry."
+                "headers": "Values are stored in the Home Assistant configuration entry.",
+                "tls_mode": "For HTTPS ingress and subapp proxies only. Warning: ignoring certificate errors disables server identity verification. Configured credentials can reach an impersonating server.",
+                "tls_certificate": "Required for provided certificate trust. Paste CA or server certificates, without private keys. Hostname, chain, and expiry verification still apply. Other panels keep their own trust settings."
               }
             }
           },
@@ -122,11 +133,15 @@
                 "url_match": "Dynamic URL match pattern",
                 "url_replace": "Dynamic URL replacement",
                 "headers": "Request headers",
-                "rewrite": "Response rewrites (in order)"
+                "rewrite": "Response rewrites (in order)",
+                "tls_mode": "HTTPS certificate verification",
+                "tls_certificate": "Trusted certificate(s) in PEM format"
               },
               "data_description": {
                 "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
-                "headers": "Values are stored in the Home Assistant configuration entry."
+                "headers": "Values are stored in the Home Assistant configuration entry.",
+                "tls_mode": "For HTTPS ingress and subapp proxies only. Warning: ignoring certificate errors disables server identity verification. Configured credentials can reach an impersonating server.",
+                "tls_certificate": "Required for provided certificate trust. Paste CA or server certificates, without private keys. Hostname, chain, and expiry verification still apply. Other panels keep their own trust settings."
               }
             }
           },
@@ -148,7 +163,9 @@
         "invalid_parent": "Choose an existing parent without cycles. A subapp needs an ingress parent; other child panels need a top-level parent.",
         "route_conflict": "This panel route is already used by another panel.",
         "duplicate_panel": "A panel with this slug already exists.",
-        "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed."
+        "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed.",
+        "invalid_tls_mode": "TLS options apply only to HTTPS proxies in ingress or subapp mode.",
+        "invalid_tls_certificate": "Paste one or more valid PEM CA or server certificates, including the BEGIN CERTIFICATE and END CERTIFICATE lines."
       },
       "abort": {
         "configuration_changed": "Configuration changed while this form was open. Reopen it to use the latest settings.",

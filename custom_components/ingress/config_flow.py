@@ -21,7 +21,8 @@ except ImportError:
 
 from . import (CONFIG_SCHEMA, CONF_SHOW_IN_SIDEBAR, CONF_UI_CONFIGURED,
                _active_panels, _panel_subentry, _subentry_panels)
-from .const import DOMAIN, ConfMode, RewriteMode, UIMode, WorkMode
+from .const import CONF_TLS_CERTIFICATE, CONF_TLS_MODE, DOMAIN, ConfMode, RewriteMode, TLSMode, UIMode, WorkMode
+from .tls import InvalidTLS, tls_context
 
 CONNECT_TIMEOUT = 10
 DEFAULT_URL = "ha-ingress:8080"
@@ -83,6 +84,8 @@ def _panel_schema(editing=False):
                     {
                         vol.Optional("work_mode"): _select(WorkMode),
                         vol.Optional("ui_mode"): _select(UIMode),
+                        vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): _select(TLSMode, translation_key="tls_mode"),
+                        vol.Optional(CONF_TLS_CERTIFICATE): selector.TextSelector({"multiline": True}),
                         vol.Optional("index"): text,
                         vol.Optional("parent"): text,
                         vol.Optional("cookie_name"): text,
@@ -153,6 +156,8 @@ def _panel_from_form(user_input):
         if not match:
             raise InvalidPanel("invalid_regex")
         panel["url"] = {"default": panel.get("url", ""), "match": match, "replace": replace}
+    if panel.get(CONF_TLS_MODE, TLSMode.SYSTEM) != TLSMode.CUSTOM:
+        panel.pop(CONF_TLS_CERTIFICATE, None)
     return panel
 
 
@@ -187,6 +192,10 @@ def _validate_panels(hass, panels):
         mode = panel["work_mode"]
         url = panel["url"]
         _validate_url(url["default"] if isinstance(url, dict) else url, mode)
+        try:
+            tls_context(panel)
+        except InvalidTLS as err:
+            raise InvalidPanel(err.reason) from err
         if isinstance(url, dict) and not url["match"]:
             raise InvalidPanel("invalid_regex")
         headers = panel.get("headers", {})

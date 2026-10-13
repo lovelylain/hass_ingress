@@ -21,6 +21,14 @@ LOGGER: "Final" = logging.getLogger(__package__)
 
 API_BASE: "Final" = "/api/ingress"
 URL_BASE: "Final" = "/files/ingress"
+CONF_TLS_MODE = "tls_mode"
+CONF_TLS_CERTIFICATE = "tls_certificate"
+
+
+class TLSMode(StrEnum):
+    SYSTEM = "system"
+    CUSTOM = "custom"
+    DISABLED = "disabled"
 
 
 class WorkMode(StrEnum):
