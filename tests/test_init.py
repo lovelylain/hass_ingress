@@ -48,7 +48,10 @@ async def test_ui_setup_reload_and_restart(hass, http):
     entry.add_to_hass(hass)
     frontend.async_register_built_in_panel(hass, "config")
 
-    with patch("homeassistant.helpers.reload.async_integration_yaml_config") as yaml:
+    with (
+        patch("homeassistant.helpers.reload.async_integration_yaml_config") as yaml,
+        patch.object(hass.config_entries, "async_reload", return_value=True),
+    ):
         assert await async_setup(hass, CONFIG_SCHEMA({DOMAIN: {"ignored": {CONF_URL: "old:80"}}}))
         assert await async_setup_entry(hass, entry)
         assert "router" in hass.data[frontend.DATA_PANELS]
@@ -75,6 +78,7 @@ async def test_ui_setup_reload_and_restart(hass, http):
         assert "router" not in hass.data[frontend.DATA_PANELS]
         assert "config" in hass.data[frontend.DATA_PANELS]
         yaml.assert_not_called()
+        await hass.async_block_till_done()
 
 
 async def test_dynamic_url_is_not_mutated(hass, http):

@@ -155,7 +155,8 @@
         "agent_panels": "These panels are managed by the external agent. Configure them there, or use Reconfigure to switch to the local UI.",
         "yaml_panels": "These panels are managed in configuration.yaml. Use Reconfigure to import them into the local UI.",
         "reconfigure_successful": "Reconfiguration was successful."
-      }
+      },
+      "entry_type": "Ingress"
     }
   },
   "issues": {
