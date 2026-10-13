@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from homeassistant.components import frontend, http, panel_custom
 from homeassistant.const import (
     CONF_DEFAULT,
@@ -21,6 +22,7 @@ from yarl import URL
 
 from .const import (
     DOMAIN,
+    CONF_PANELS,
     LOGGER as _LOGGER,
     API_BASE,
     URL_BASE,
@@ -107,23 +109,30 @@ CONFIG_SCHEMA = vol.Schema(
 
 async def async_setup(hass: "HomeAssistant", config) -> bool:
     # init once
-    data = await _async_init(hass)
+    await _async_init(hass)
 
     # init config entry
     entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries:
+    if not entries and DOMAIN in config:
         hass.async_create_task(
             hass.config_entries.flow.async_init(DOMAIN, context={"source": "import"})
         )
-
-    # init yaml mode
-    if not entries or entries[0].data[CONF_MODE] == ConfMode.YAML:
-        await setup_domain(hass, data, config)
 
     return True
 
 
 async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    data = await _async_init(hass)
+    if entry.data[CONF_MODE] == ConfMode.UI:
+        config = CONFIG_SCHEMA({DOMAIN: deepcopy(entry.options.get(CONF_PANELS, {}))})
+        await setup_domain(hass, data, config)
+        return True
+    if entry.data[CONF_MODE] == ConfMode.YAML:
+        from homeassistant.helpers.reload import async_integration_yaml_config
+
+        config = await async_integration_yaml_config(hass, DOMAIN)
+        await setup_domain(hass, data, config or {})
+        return True
     if entry.data[CONF_MODE] != ConfMode.AGENT:
         return True
 
@@ -174,18 +183,23 @@ async def async_unload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> boo
     client: IngressClient
     if client := hass.data[DOMAIN].pop("client", None):
         client.disconnect()
+    data: DomainData = hass.data[DOMAIN]
+    for name in data["panels"]:
+        frontend.async_remove_panel(hass, name)
+    data["panels"].clear()
+    data["config"].clear()
     return True
 
 
 async def setup_domain(hass: "HomeAssistant", data: "DomainData", config) -> None:
+    # Parsing expands placeholders; keep the saved configuration unchanged.
+    config, panels = _parse_config(hass, {DOMAIN: deepcopy(config.get(DOMAIN, {}))})
+
     # clean
     for name in data["panels"]:
         frontend.async_remove_panel(hass, name)
     data["panels"].clear()
     data["config"].clear()
-
-    # parse config
-    config, panels = _parse_config(hass, config)
 
     # add ingress
     now = int(time.time())
@@ -223,7 +237,12 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
         # register reload config
         async def reload_config(call: "ServiceCall"):
             data: DomainData = hass.data[DOMAIN]
-            if client := data.get("client"):
+            entries = hass.config_entries.async_entries(DOMAIN)
+            if entries and entries[0].data[CONF_MODE] == ConfMode.UI:
+                config = CONFIG_SCHEMA(
+                    {DOMAIN: deepcopy(entries[0].options.get(CONF_PANELS, {}))}
+                )
+            elif client := data.get("client"):
                 config = await get_remote_config(hass, client)
             else:
                 config = await async_integration_yaml_config(hass, DOMAIN)

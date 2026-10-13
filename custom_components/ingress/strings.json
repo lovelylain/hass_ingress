@@ -3,25 +3,177 @@
     "step": {
       "user": {
         "title": "Ingress",
-        "description": "Select configuration mode.\nagent: Configure with ui, requires running an agent.\nyaml: Manually edit configuration.yaml file.",
+        "description": "Local UI: manage panels here without an agent or YAML. After setup, choose Configure to add panels.\nAgent: connect to an already running external ingress agent.\nYAML: manage panels in configuration.yaml.",
         "data": {
           "mode": "Configuration mode"
         }
       },
       "my_agent": {
         "title": "Ingress agent",
-        "description": "Enter the URL to your already running ingress agent. If you do not have the ingress agent running, you should install it first.",
+        "description": "Enter the URL of your already running ingress agent.",
         "data": {
           "url": "URL of the ingress agent"
+        }
+      },
+      "import_yaml": {
+        "title": "Import YAML panels",
+        "description": "Copy the current YAML panels into the local UI. Resolved !secret values, including headers and tokens, will be stored in the Home Assistant configuration entry. Further YAML edits will not update these panels. Confirm to import and switch modes; cancel to keep YAML unchanged.",
+        "data": {
+          "confirm": "Import panels and switch to local UI"
         }
       }
     },
     "error": {
-      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
-      "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]"
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_panel": "Enter a valid panel slug and configuration.",
+      "invalid_url": "Enter a valid HTTP(S) URL or host and port for a proxy, a /relative or HTTP(S) URL for an iframe or custom panel, or an add-on slug for an add-on panel.",
+      "invalid_regex": "Check the regular expressions and replacement groups. Rewrites use Python syntax; dynamic URLs use JavaScript replacement syntax ($1, $2).",
+      "duplicate_headers": "Header names must be unique, ignoring letter case.",
+      "invalid_headers": "Use valid HTTP header names and values without line breaks.",
+      "invalid_token": "Cookie names and static tokens must contain only HTTP token characters.",
+      "invalid_parent": "Choose an existing parent without cycles. A subapp needs an ingress parent; other child panels need a top-level parent.",
+      "route_conflict": "This panel route is already used by another panel.",
+      "duplicate_panel": "A panel with this slug already exists.",
+      "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed.",
+      "parent_has_children": "Remove or move this panel's child panels before deleting it."
     },
     "abort": {
-      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      "already_configured": "Ingress is already configured. Use Configure to manage panels or Reconfigure to change the mode.",
+      "reconfigure_successful": "Reconfiguration was successful.",
+      "configuration_changed": "Configuration changed while this form was open. Reopen it to use the latest settings.",
+      "import_cancelled": "Import cancelled. YAML configuration is unchanged."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Manage Ingress panels",
+        "menu_options": {
+          "add": "Add panel",
+          "edit": "Edit panel",
+          "remove": "Remove panel"
+        }
+      },
+      "add": {
+        "title": "Add panel",
+        "description": "Enter the panel address and sidebar details. Open Advanced to configure child panels, authentication, dynamic URLs, headers, and ordered response rewrites. Empty optional fields remove the saved setting. Header values and static tokens are stored in the Home Assistant configuration entry; static tokens remain valid until changed.",
+        "data": {
+          "slug": "Panel identifier",
+          "title": "Sidebar title",
+          "icon": "Sidebar icon",
+          "url": "Primary URL or add-on slug",
+          "require_admin": "Administrator-only sidebar"
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "work_mode": "Work mode",
+              "ui_mode": "Display mode",
+              "index": "Index path",
+              "parent": "Parent panel slug",
+              "cookie_name": "Cookie name",
+              "static_token": "Static token",
+              "expire_time": "Token lifetime",
+              "url_match": "Dynamic URL match pattern",
+              "url_replace": "Dynamic URL replacement",
+              "headers": "Request headers",
+              "rewrite": "Response rewrites (in order)"
+            },
+            "data_description": {
+              "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
+              "headers": "Values are stored in the Home Assistant configuration entry."
+            }
+          }
+        },
+        "data_description": {
+          "url": "Dynamic URLs use this address as their default. Proxy modes accept a host and port. Iframe and custom modes also accept a /relative URL.",
+          "title": "Leave empty to hide the panel from the sidebar.",
+          "require_admin": "Controls sidebar visibility; it does not add backend authorization."
+        }
+      },
+      "edit": {
+        "title": "Edit panel",
+        "description": "Panel slug: {slug}. The slug cannot be changed.\n\nEnter the panel address and sidebar details. Open Advanced to configure child panels, authentication, dynamic URLs, headers, and ordered response rewrites. Empty optional fields remove the saved setting. Header values and static tokens are stored in the Home Assistant configuration entry; static tokens remain valid until changed.",
+        "data": {
+          "title": "Sidebar title",
+          "icon": "Sidebar icon",
+          "url": "Primary URL or add-on slug",
+          "require_admin": "Administrator-only sidebar",
+          "panel": "Panel"
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "work_mode": "Work mode",
+              "ui_mode": "Display mode",
+              "index": "Index path",
+              "parent": "Parent panel slug",
+              "cookie_name": "Cookie name",
+              "static_token": "Static token",
+              "expire_time": "Token lifetime",
+              "url_match": "Dynamic URL match pattern",
+              "url_replace": "Dynamic URL replacement",
+              "headers": "Request headers",
+              "rewrite": "Response rewrites (in order)"
+            },
+            "data_description": {
+              "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
+              "headers": "Values are stored in the Home Assistant configuration entry."
+            }
+          }
+        },
+        "data_description": {
+          "url": "Dynamic URLs use this address as their default. Proxy modes accept a host and port. Iframe and custom modes also accept a /relative URL.",
+          "title": "Leave empty to hide the panel from the sidebar.",
+          "require_admin": "Controls sidebar visibility; it does not add backend authorization."
+        }
+      },
+      "remove": {
+        "title": "Remove panel",
+        "data": {
+          "panel": "Panel"
+        }
+      },
+      "remove_confirm": {
+        "title": "Confirm removal",
+        "description": "Remove panel {slug}? Its route and sidebar entry will be removed.",
+        "data": {
+          "confirm": "Remove this panel"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "invalid_panel": "Enter a valid panel slug and configuration.",
+      "invalid_url": "Enter a valid HTTP(S) URL or host and port for a proxy, a /relative or HTTP(S) URL for an iframe or custom panel, or an add-on slug for an add-on panel.",
+      "invalid_regex": "Check the regular expressions and replacement groups. Rewrites use Python syntax; dynamic URLs use JavaScript replacement syntax ($1, $2).",
+      "duplicate_headers": "Header names must be unique, ignoring letter case.",
+      "invalid_headers": "Use valid HTTP header names and values without line breaks.",
+      "invalid_token": "Cookie names and static tokens must contain only HTTP token characters.",
+      "invalid_parent": "Choose an existing parent without cycles. A subapp needs an ingress parent; other child panels need a top-level parent.",
+      "route_conflict": "This panel route is already used by another panel.",
+      "duplicate_panel": "A panel with this slug already exists.",
+      "yaml_load_failed": "Unable to load YAML configuration. Your configuration mode has not changed.",
+      "parent_has_children": "Remove or move this panel's child panels before deleting it."
+    },
+    "abort": {
+      "configuration_changed": "Configuration changed while this form was open. Reopen it to use the latest settings.",
+      "remove_cancelled": "Panel removal cancelled.",
+      "agent_options": "These panels are managed by the external agent. Configure them there, or use Reconfigure to switch to the local UI.",
+      "yaml_options": "These panels are managed in configuration.yaml. Use Reconfigure to import them into the local UI."
+    }
+  },
+  "selector": {
+    "configuration_mode": {
+      "options": {
+        "ui": "Local UI",
+        "agent": "External agent",
+        "yaml": "YAML"
+      }
     }
   }
 }

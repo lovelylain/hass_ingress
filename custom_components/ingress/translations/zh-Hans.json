@@ -19,7 +19,7 @@
         "data": {
           "mode": "配置模式"
         },
-        "description": "选择配置模式。\nagent: 使用 ui 配置，需要运行 agent。\nyaml: 手动编辑 configuration.yaml 文件.",
+        "description": "Local UI: manage panels here without an agent or YAML. After setup, choose Configure to add panels.\nAgent: connect to an already running external ingress agent.\nYAML: manage panels in configuration.yaml.",
         "title": "Ingress"
       }
     }

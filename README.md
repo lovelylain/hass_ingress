@@ -1,5 +1,12 @@
 # hass_ingress
 
+Add web applications such as Node-RED, a router interface, or a monitoring tool to
+the Home Assistant sidebar. Configure panels in Home Assistant, proxy supported
+applications through its authenticated session, or embed other web pages.
+
+Start with [installation](#installation) and [graphical configuration](#graphical-configuration).
+Existing installations can [import their YAML panels](#move-existing-yaml-panels-to-the-interface).
+
 ![GitHub actions](https://github.com/lovelylain/hass_ingress/actions/workflows/validate.yaml/badge.svg)
 
 **💡 Tip:** If this project helps you, consider giving me a tip for the time I spent building this project:
@@ -13,8 +20,6 @@ v1.2.4 Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch ta
 v1.2.5 Feature: [Static Token](#static-token) public links that never expire.
 
 v1.3.0 Feature: [User Info](#user-info) support user info in headers.
-
-Hass.io provides a very nice feature called [Hass.io Ingress](https://www.home-assistant.io/blog/2019/04/15/hassio-ingress/), `hass_ingress` extracts this feature into a standalone integration, it allows you to add additional ingress panels to your Home Assistant frontend. The panels are listed in the sidebar and can contain external resources like the web frontend of your router, your monitoring system, or your media server. Home Assistant will take care of the authentication and the secure connection, so users can access the external resources without extra login.
 
 ![overview](images/overview.png)
 
@@ -58,7 +63,53 @@ _or_
 
 ## Configuration
 
-To enable Ingress panels in your installation, add the following to your `configuration.yaml` file, then restart HA:
+### Graphical configuration
+
+Requires Home Assistant 2025.8 or newer. After installing the integration, restart
+Home Assistant once, then:
+
+1. Open **Settings → Devices & services → Add integration** and select **Ingress**.
+2. Select **Local UI** as the configuration mode.
+3. Open **Configure** on the Ingress integration and select **Add panel**.
+4. Enter a panel identifier, its sidebar title, and its URL. For example, for a
+   Node-RED server listening at `http://127.0.0.1:45180`, use identifier `nodered`,
+   title `Node-RED`, and that URL. Use your own server's address as reachable from
+   Home Assistant. Choose an icon and administrator-only sidebar visibility if needed.
+5. Save. The panel appears without restarting Home Assistant.
+
+Use **Configure → Edit panel** or **Remove panel** to manage existing panels.
+Panel identifiers stay fixed when editing because they are used in access URLs
+and parent relationships. Remove a panel's children before removing their parent.
+
+The collapsed **Advanced** section includes work and display modes, parent panels,
+the index path, token settings, and dynamic URL matching. HTTP headers and response
+rewrite rules use graphical lists of fields; no YAML editor or external agent is
+required. Clearing an optional value removes that setting.
+
+Configuration is stored by Home Assistant and survives restarts. Saving changes
+reloads Ingress and renews its sessions; open panels may need to be refreshed.
+The `ingress.reload` action reloads the selected configuration source.
+
+### Move existing YAML panels to the interface
+
+Open the Ingress integration's menu, choose **Reconfigure**, and select
+**Local UI**. On the first switch, confirm the import to copy the current YAML
+panels into Home Assistant's stored configuration. Cancelling leaves YAML in
+control. After the import, manage panels with **Configure**; the `ingress:` section in
+`configuration.yaml` is ignored and can be removed.
+
+Later mode switches reuse the saved UI panels rather than importing YAML again.
+
+Values referenced with `!secret` are copied as resolved values, rather than secret
+references, into Home Assistant's stored configuration. Header values and static
+tokens are masked in the forms. An administrator-only sidebar entry controls
+sidebar visibility. A static token creates a public access link that bypasses
+Home Assistant login; leave it empty unless you need that behavior.
+
+### YAML configuration
+
+To manage panels with YAML instead, add the following to your
+`configuration.yaml` file, then restart Home Assistant:
 
 ```yaml
 ingress:
@@ -121,7 +172,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
 
 - **ingress**: map (REQUIRED) Enables the hass_ingress integration. Only allowed once.
   - **panel_name**: map (REQUIRED) Name of the panel. Only allowed once.
-    - **title**: string (REQUIRED) Friendly title for the panel. Will be used in the sidebar.
+    - **title**: string (optional) Friendly title for the panel in the sidebar. Leave unset or empty to hide the sidebar entry.
     - **icon**: [icon](https://www.home-assistant.io/docs/configuration/customizing-devices/#icon) (optional) Icon for entry.
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
     - **work_mode**: string (oneof `ingress` `subapp` `iframe` `auth` `hassio` `custom`, default: ingress)
@@ -222,3 +273,16 @@ ingress:
       # $username is user login name
       Remote-User: $username
 ```
+
+## Development
+
+Run the integration tests with Python 3.14:
+
+```sh
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements-test.txt
+.venv/bin/python -m pytest
+```
+
+The tests use Home Assistant's real config and options flow managers and panel
+registration. They replace network connections and the HTTP server boundary.
