@@ -159,7 +159,7 @@ async def test_advanced_roundtrip_and_clear_optional(hass):
         "title": "App", "icon": "mdi:web", "require_admin": True,
         "url": {"default": "http://app", "match": r"(?<host>.*)", "replace": "https://$<host>/$12"},
         "work_mode": "iframe", "ui_mode": "toolbar", "index": "start", "cookie_name": "app_cookie",
-        "static_token": "public-token", "expire_time": 123,
+        "static_token": "public-token", "expire_time": 123, "enable_compress": True,
         "headers": {"Authorization": "secret", "X-App": "value"},
         "rewrite": [{"mode": "header", "path": "^/", "name": "Location", "match": "(old)", "replace": r"\1/new"}, {"mode": "body", "match": "old", "replace": "new"}],
     }}})[DOMAIN]
