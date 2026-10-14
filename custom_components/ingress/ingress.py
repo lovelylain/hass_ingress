@@ -283,10 +283,14 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             skip_auto_headers={hdrs.CONTENT_TYPE},
         ) as result:
             headers = _response_header(result)
-            if ctype := result.headers.get(hdrs.CONTENT_TYPE):
-                ctype = ctype.partition(";")[0].strip()
+            ctype_raw = result.headers.get(hdrs.CONTENT_TYPE)
+            if ctype_raw:
+                ctype = ctype_raw.partition(";")[0].strip()
             else:
                 ctype = "application/octet-stream"
+            # Multipart responses must keep their Content-Type parameters
+            # (e.g. the boundary); without them the client cannot parse the body.
+            keep_raw_ctype = ctype_raw is not None and ctype.lower().startswith("multipart/")
 
             rewrite_body = None
             if cfg.rewrites:
@@ -312,13 +316,18 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                 body = await result.read()
                 if rewrite_body:
                     body = rewrite_body(body)
-                return web.Response(
+                response = web.Response(
                     headers=headers, status=result.status, content_type=ctype, body=body
                 )
+                if keep_raw_ctype:
+                    response.headers[hdrs.CONTENT_TYPE] = ctype_raw
+                return response
 
             # Stream response
             response = web.StreamResponse(status=result.status, headers=headers)
             response.content_type = ctype
+            if keep_raw_ctype:
+                response.headers[hdrs.CONTENT_TYPE] = ctype_raw
 
             try:
                 await response.prepare(request)
