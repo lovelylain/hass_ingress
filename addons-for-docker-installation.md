@@ -453,4 +453,18 @@ ingress:
         name: "(Location|Set-Cookie)"
         match: /cgi-bin/
         replace: $http_x_ingress_path/cgi-bin/
+      # Preserve router filesystem paths; keep this after the URL rewrites.
+      - mode: body
+        path: ^/luci-static/resources/(?:luci\.js|view/status/index\.js)$
+        match: (?:L|this)\.resource\(\s*(['"])(preload|view/status/include)\1\s*\)
+        replace: "'/luci-static/resources/\\2'"
+      # Refresh cached scripts, including through a CDN.
+      - mode: body
+        path: ^/cgi-bin/luci(?:/.*)?$
+        name: ^text/html$
+        match: (/luci\.js\?v=[^"'<>\s]+)(?=["'])
+        replace: \1-ingress-fs1
 ```
+
+The filesystem rule prevents an empty Overview; the final rule refreshes cached
+scripts. Tested with OpenWrt 25.12.5 and LuCI `26.187.49110~99464ec`.
