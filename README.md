@@ -15,12 +15,6 @@ Existing installations can [import their YAML panels](#move-existing-yaml-panels
   <img src="https://cdn.buymeacoffee.com/buttons/default-yellow.png" alt="Buy Me A Coffee" width="150px">
 </a>
 
-v1.2.4 Feature: [Multiple Tabs](#multiple-tabs) without reloading when switch tabs.
-
-v1.2.5 Feature: [Static Token](#static-token) public links that never expire.
-
-v1.3.0 Feature: [User Info](#user-info) support user info in headers.
-
 ![overview](images/overview.png)
 
 ## Features
