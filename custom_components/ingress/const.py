@@ -44,5 +44,6 @@ class RewriteMode(StrEnum):
 
 
 class ConfMode(StrEnum):
+    UI = "ui"
     AGENT = "agent"
     YAML = "yaml"

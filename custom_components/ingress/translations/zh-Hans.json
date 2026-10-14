@@ -19,7 +19,7 @@
         "data": {
           "mode": "配置模式"
         },
-        "description": "选择配置模式。\nagent: 使用 ui 配置，需要运行 agent。\nyaml: 手动编辑 configuration.yaml 文件.",
+        "description": "本地 UI：每个 ingress 都显示在各自的集成条目中。设置完成后，选择“添加 ingress”。\nAgent：连接到已运行的外部 ingress agent。\nYAML：在 configuration.yaml 中管理面板。",
         "title": "Ingress"
       }
     }

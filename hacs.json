@@ -1,5 +1,6 @@
 {
   "name": "Ingress",
+  "homeassistant": "2025.8.0",
   "content_in_root": false,
   "render_readme": true,
   "zip_release": true,
