@@ -46,6 +46,7 @@ class IngressCfg:
     headers = {}
     cookie_name = "ingress_token"
     _cookie_name_re = None
+    enable_compress = False
     expire_time = 3600
     static_token = ""
     rewrites: list[RewriteCfg] = []

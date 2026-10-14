@@ -90,6 +90,7 @@ def _panel_schema(editing=False):
                         vol.Optional("expire_time"): selector.NumberSelector(
                             {"min": 0, "step": 1, "mode": "box", "unit_of_measurement": "seconds"}
                         ),
+                        vol.Optional("enable_compress", default=False): selector.BooleanSelector(),
                         vol.Optional("url_match"): text,
                         vol.Optional("url_replace"): text,
                         vol.Optional("headers"): headers,

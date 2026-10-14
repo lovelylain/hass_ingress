@@ -36,7 +36,6 @@ METH_ALLOW_REDIRECT = (hdrs.METH_GET, hdrs.METH_HEAD)
 INIT_HEADERS_FILTER = {
     hdrs.CONTENT_LENGTH,
     hdrs.CONTENT_ENCODING,
-    hdrs.ACCEPT_ENCODING,  # Avoid local compression, as we will compress at the border
     hdrs.TRANSFER_ENCODING,
     hdrs.SEC_WEBSOCKET_EXTENSIONS,
     hdrs.SEC_WEBSOCKET_PROTOCOL,
@@ -46,7 +45,6 @@ INIT_HEADERS_FILTER = {
 RESPONSE_HEADERS_FILTER = {
     hdrs.TRANSFER_ENCODING,
     hdrs.CONTENT_LENGTH,
-    hdrs.CONTENT_TYPE,
     hdrs.CONTENT_ENCODING,
 }
 
@@ -283,17 +281,13 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             allow_redirects=False,
             data=data,
             timeout=DISABLED_TIMEOUT,
-            skip_auto_headers={hdrs.CONTENT_TYPE, hdrs.ACCEPT_ENCODING},
+            skip_auto_headers=_skip_auto_headers(cfg),
         ) as result:
             headers = _response_header(result)
-            ctype_raw = result.headers.get(hdrs.CONTENT_TYPE)
-            if ctype_raw:
-                ctype = ctype_raw.partition(";")[0].strip()
+            if ctype := result.headers.get(hdrs.CONTENT_TYPE):
+                ctype = ctype.partition(";")[0].strip()
             else:
                 ctype = "application/octet-stream"
-            # Multipart responses must keep their Content-Type parameters
-            # (e.g. the boundary); without them the client cannot parse the body.
-            keep_raw_ctype = ctype_raw is not None and ctype.lower().startswith("multipart/")
 
             rewrite_body = None
             if cfg.rewrites:
@@ -314,22 +308,14 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
 
             headers = CIMultiDict((k, v) for k, vs in headers.items() for v in vs if v)
 
-            # Empty body responses (304, 204, HEAD, etc.) should not be streamed,
-            # otherwise aiohttp may generate an invalid "0\r\n\r\n" chunk.
-            # This also avoids setting content_type for empty responses.
-            if must_be_empty_body(request.method, result.status):
-                # If upstream contains content-type, preserve it (e.g. for HEAD requests)
-                if ctype != "application/octet-stream":
-                    headers[hdrs.CONTENT_TYPE] = ctype
-                return web.Response(headers=headers, status=result.status)
+            use_buffered = rewrite_body or must_be_empty_body(request.method, result.status)
+            if not use_buffered and cfg.enable_compress:
+                # Simple request: buffer small bodies so they can be compressed in one pass.
+                # NOTE: with auto_decompress the upstream Content-Length is the compressed size,
+                # so this may still expand; the size floor below applies to the real body length.
+                if content_length := result.headers.get(hdrs.CONTENT_LENGTH):
+                    use_buffered = int(content_length) <= MAX_SIMPLE_RESPONSE_SIZE
 
-            # Simple request: buffer small bodies so they can be compressed in one pass.
-            # NOTE: with auto_decompress the upstream Content-Length is the compressed size,
-            # so this may still expand; the size floor below applies to the real body length.
-            content_length = result.headers.get(hdrs.CONTENT_LENGTH)
-            use_buffered = rewrite_body is not None or (
-                content_length is not None and int(content_length) <= MAX_SIMPLE_RESPONSE_SIZE
-            )
             if use_buffered:
                 body = await result.read()
                 if rewrite_body:
@@ -337,7 +323,8 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                 # 206 carries Content-Range offsets into the identity representation;
                 # re-encoding the body would corrupt range assembly.
                 compress = (
-                    len(body) > MIN_COMPRESSED_SIZE
+                    cfg.enable_compress
+                    and len(body) > MIN_COMPRESSED_SIZE
                     and result.status != 206
                     and _should_compress(ctype)
                 )
@@ -346,24 +333,18 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                 simple_response = web.Response(
                     headers=headers,
                     status=result.status,
-                    content_type=ctype,
                     body=body,
                     zlib_executor_size=32768,
                 )
-                if keep_raw_ctype:
-                    simple_response.headers[hdrs.CONTENT_TYPE] = ctype_raw
                 if compress:
                     simple_response.enable_compression()
                 return simple_response
 
             # Stream response
-            compress = result.status != 206 and _should_compress(ctype)
+            compress = cfg.enable_compress and result.status != 206 and _should_compress(ctype)
             if compress:
                 headers.add(hdrs.VARY, hdrs.ACCEPT_ENCODING)
             response = web.StreamResponse(status=result.status, headers=headers)
-            response.content_type = ctype
-            if keep_raw_ctype:
-                response.headers[hdrs.CONTENT_TYPE] = ctype_raw
             if compress:
                 response.enable_compression()
 
@@ -418,6 +399,8 @@ def _init_header(
         name = std_header_name(name)
         if name in INIT_HEADERS_FILTER:
             continue
+        if name == hdrs.ACCEPT_ENCODING and cfg.enable_compress:
+            continue
         if name == hdrs.COOKIE:
             if not (value := cfg.remove_token_from_cookie(value)):
                 continue
@@ -464,6 +447,10 @@ def _init_header(
 
     return headers
 
+def _skip_auto_headers(cfg: "IngressCfg"):
+    if cfg.enable_compress:
+        return {hdrs.CONTENT_TYPE, hdrs.ACCEPT_ENCODING}
+    return {hdrs.CONTENT_TYPE}
 
 def _response_header(response: aiohttp.ClientResponse) -> dict[str, list[str]]:
     """Create response header."""

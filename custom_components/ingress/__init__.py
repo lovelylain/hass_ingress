@@ -63,8 +63,9 @@ CONF_REWRITE: "Final" = "rewrite"
 CONF_COOKIE_NAME: "Final" = "cookie_name"
 CONF_EXPIRE_TIME: "Final" = "expire_time"
 CONF_STATIC_TOKEN: "Final" = "static_token"
-CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
-CONF_UI_CONFIGURED = "ui_configured"
+CONF_ENABLE_COMPRESS: "Final" = "enable_compress"
+CONF_SHOW_IN_SIDEBAR: "Final" = "show_in_sidebar"
+CONF_UI_CONFIGURED: "Final" = "ui_configured"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -103,6 +104,7 @@ CONFIG_SCHEMA = vol.Schema(
                     vol.Optional(CONF_COOKIE_NAME): cv.string,
                     vol.Optional(CONF_STATIC_TOKEN): cv.string,
                     vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
+                    vol.Optional(CONF_ENABLE_COMPRESS): cv.boolean,
                 }
             )
         ),
@@ -399,6 +401,7 @@ def _parse_config(
                     cookie_name=data.get(CONF_COOKIE_NAME),
                     expire_time=data.get(CONF_EXPIRE_TIME),
                     static_token=data.get(CONF_STATIC_TOKEN),
+                    enable_compress=data.get(CONF_ENABLE_COMPRESS),
                 )
                 url += sub_path
                 if work_mode in (WorkMode.INGRESS, WorkMode.SUBAPP):
