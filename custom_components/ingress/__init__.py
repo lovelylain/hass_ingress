@@ -1,4 +1,7 @@
 import asyncio
+from copy import deepcopy
+from types import MappingProxyType
+from homeassistant.config_entries import ConfigSubentry
 from homeassistant.components import frontend, http, panel_custom
 from homeassistant.const import (
     CONF_DEFAULT,
@@ -59,6 +62,8 @@ CONF_REWRITE: "Final" = "rewrite"
 CONF_COOKIE_NAME: "Final" = "cookie_name"
 CONF_EXPIRE_TIME: "Final" = "expire_time"
 CONF_STATIC_TOKEN: "Final" = "static_token"
+CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
+CONF_UI_CONFIGURED = "ui_configured"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -107,23 +112,31 @@ CONFIG_SCHEMA = vol.Schema(
 
 async def async_setup(hass: "HomeAssistant", config) -> bool:
     # init once
-    data = await _async_init(hass)
+    await _async_init(hass)
 
     # init config entry
     entries = hass.config_entries.async_entries(DOMAIN)
-    if not entries:
+    if not entries and DOMAIN in config:
         hass.async_create_task(
             hass.config_entries.flow.async_init(DOMAIN, context={"source": "import"})
         )
-
-    # init yaml mode
-    if not entries or entries[0].data[CONF_MODE] == ConfMode.YAML:
-        await setup_domain(hass, data, config)
 
     return True
 
 
 async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    data = await _async_init(hass)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    if entry.data[CONF_MODE] == ConfMode.UI:
+        config = _ui_config(hass, entry)
+        await setup_domain(hass, data, config)
+        return True
+    if entry.data[CONF_MODE] == ConfMode.YAML:
+        from homeassistant.helpers.reload import async_integration_yaml_config
+
+        config = await async_integration_yaml_config(hass, DOMAIN)
+        await setup_domain(hass, data, config or {})
+        return True
     if entry.data[CONF_MODE] != ConfMode.AGENT:
         return True
 
@@ -161,6 +174,85 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     return True
 
 
+async def async_reload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
+def _panel_subentry(slug, panel):
+    panel = deepcopy(panel)
+    title = panel.pop(CONF_TITLE, None)
+    panel[CONF_SHOW_IN_SIDEBAR] = bool(title)
+    return ConfigSubentry(
+        subentry_type="panel", unique_id=slug, title=title or slug,
+        data=MappingProxyType(panel),
+    )
+
+
+def _subentry_panels(entry):
+    panels = {}
+    for subentry in entry.subentries.values():
+        panel = deepcopy(dict(subentry.data))
+        if panel.pop(CONF_SHOW_IN_SIDEBAR, True) or panel.get(CONF_PARENT):
+            panel[CONF_TITLE] = subentry.title
+        panels[subentry.unique_id] = panel
+    return panels
+
+
+def _active_panels(panels):
+    """Exclude broken parent chains before creating any routes or tokens."""
+    unavailable = {}
+    for slug, panel in panels.items():
+        seen = {slug}
+        parent = panel.get(CONF_PARENT)
+        while parent:
+            if parent not in panels or parent in seen:
+                unavailable[slug] = parent
+                break
+            seen.add(parent)
+            parent = panels[parent].get(CONF_PARENT)
+    return {slug: panel for slug, panel in panels.items() if slug not in unavailable}, unavailable
+
+
+def _ui_config(hass, entry):
+    from homeassistant.helpers import issue_registry as ir
+
+    panels, unavailable = _active_panels(_subentry_panels(entry))
+    issue_id = f"missing_parent_{entry.entry_id}"
+    if unavailable:
+        ir.async_create_issue(
+            hass, DOMAIN, issue_id, is_fixable=False,
+            severity=ir.IssueSeverity.WARNING, translation_key="missing_parent",
+            translation_placeholders={"panels": ", ".join(unavailable), "parents": ", ".join(sorted(set(unavailable.values())))},
+        )
+    else:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+    return CONFIG_SCHEMA({DOMAIN: panels})
+
+
+async def async_migrate_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    if entry.version > 2:
+        return False
+    if entry.version == 1:
+        panels = entry.options.get("panels", {})
+        subentries = [_panel_subentry(slug, panel) for slug, panel in panels.items()]
+        for subentry in subentries:
+            if not any(existing.unique_id == subentry.unique_id for existing in entry.subentries.values()):
+                hass.config_entries.async_add_subentry(entry, subentry)
+        options = dict(entry.options)
+        options.pop("panels", None)
+        data = dict(entry.data)
+        if "panels" in entry.options or data[CONF_MODE] == ConfMode.UI:
+            data[CONF_UI_CONFIGURED] = True
+        hass.config_entries.async_update_entry(entry, version=2, data=data, options=options)
+    return True
+
+
+async def async_remove_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> None:
+    from homeassistant.helpers import issue_registry as ir
+
+    ir.async_delete_issue(hass, DOMAIN, f"missing_parent_{entry.entry_id}")
+
+
 async def on_remote_ready(hass: "HomeAssistant", client: "IngressClient", _: "Any"):
     await client.send_command({"type": "subscribe"})
 
@@ -171,21 +263,29 @@ async def get_remote_config(hass: "HomeAssistant", client: "IngressClient") -> d
 
 
 async def async_unload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
+    from homeassistant.helpers import issue_registry as ir
+
+    ir.async_delete_issue(hass, DOMAIN, f"missing_parent_{entry.entry_id}")
     client: IngressClient
     if client := hass.data[DOMAIN].pop("client", None):
         client.disconnect()
+    data: DomainData = hass.data[DOMAIN]
+    for name in data["panels"]:
+        frontend.async_remove_panel(hass, name)
+    data["panels"].clear()
+    data["config"].clear()
     return True
 
 
 async def setup_domain(hass: "HomeAssistant", data: "DomainData", config) -> None:
+    # Parsing expands placeholders; keep the saved configuration unchanged.
+    config, panels = _parse_config(hass, {DOMAIN: deepcopy(config.get(DOMAIN, {}))})
+
     # clean
     for name in data["panels"]:
         frontend.async_remove_panel(hass, name)
     data["panels"].clear()
     data["config"].clear()
-
-    # parse config
-    config, panels = _parse_config(hass, config)
 
     # add ingress
     now = int(time.time())
@@ -223,7 +323,10 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
         # register reload config
         async def reload_config(call: "ServiceCall"):
             data: DomainData = hass.data[DOMAIN]
-            if client := data.get("client"):
+            entries = hass.config_entries.async_entries(DOMAIN)
+            if entries and entries[0].data[CONF_MODE] == ConfMode.UI:
+                config = _ui_config(hass, entries[0])
+            elif client := data.get("client"):
                 config = await get_remote_config(hass, client)
             else:
                 config = await async_integration_yaml_config(hass, DOMAIN)
