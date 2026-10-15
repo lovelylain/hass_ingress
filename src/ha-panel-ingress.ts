@@ -264,6 +264,17 @@ class HaPanelIngress extends HTMLElement {
 `;
 
     const showToolbar = uiMode === "toolbar";
+    if (!showToolbar) {
+      css += `
+  :host {
+    box-sizing: border-box;
+    padding-top: var(--safe-area-inset-top, 0px);
+    padding-bottom: var(--safe-area-inset-bottom, 0px);
+    padding-left: var(--safe-area-content-inset-left, var(--safe-area-inset-left, 0px));
+    padding-right: var(--safe-area-content-inset-right, var(--safe-area-inset-right, 0px));
+  }
+`;
+    }
     if (enableSidebarSwipe()) {
       html += '<div id="swipebar"></div>';
       css += `
