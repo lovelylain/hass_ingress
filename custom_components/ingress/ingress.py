@@ -81,7 +81,7 @@ class IngressView(http.HomeAssistantView):  # type: ignore
         cookie_name = self._config.cookie_name(name)
         if cookie_name in url.query:
             cfg, token = self._config.check_token(self._hass, url.query[cookie_name])
-            if cfg:
+            if cfg and cfg.mode == WorkMode.AUTH:
                 # valid, remove ingressToken if has X-Hass-Origin else return 200
                 hass_origin = request.headers.get(X_HASS_ORIGIN)
                 if hass_origin and request.method in METH_ALLOW_REDIRECT:
@@ -95,7 +95,9 @@ class IngressView(http.HomeAssistantView):  # type: ignore
 
         # check ingress_token from cookie
         token = request.cookies.get(cookie_name, "")
-        if cfg := self._config.check_token(self._hass, token, False)[0]:
+        if (
+            cfg := self._config.check_token(self._hass, token, False)[0]
+        ) and cfg.mode == WorkMode.AUTH:
             # valid, return 200
             return web.Response(headers=cfg.headers)
 
@@ -331,7 +333,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
                     and _should_compress(ctype)
                 )
                 if compress:
-                    headers.add(hdrs.VARY, hdrs.ACCEPT_ENCODING)
+                    _ensure_vary(headers)
                 simple_response = web.Response(
                     headers=headers,
                     status=result.status,
@@ -345,7 +347,7 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             # Stream response
             compress = cfg.enable_compress and result.status != 206 and _should_compress(ctype)
             if compress:
-                headers.add(hdrs.VARY, hdrs.ACCEPT_ENCODING)
+                _ensure_vary(headers)
             response = web.StreamResponse(status=result.status, headers=headers)
             if compress:
                 response.enable_compression()
@@ -449,10 +451,12 @@ def _init_header(
 
     return headers
 
+
 def _skip_auto_headers(cfg: "IngressCfg"):
     if cfg.enable_compress:
         return {hdrs.CONTENT_TYPE, hdrs.ACCEPT_ENCODING}
     return {hdrs.CONTENT_TYPE}
+
 
 def _response_header(response: aiohttp.ClientResponse) -> dict[str, list[str]]:
     """Create response header."""
@@ -463,6 +467,14 @@ def _response_header(response: aiohttp.ClientResponse) -> dict[str, list[str]]:
             continue
         headers.setdefault(name, []).append(value)
     return headers
+
+
+def _ensure_vary(headers: "CIMultiDict[str]") -> None:
+    """Advertise Accept-Encoding in Vary without emitting a duplicate header."""
+    values = headers.getall(hdrs.VARY, [])
+    if any("accept-encoding" in value.lower() for value in values):
+        return
+    headers[hdrs.VARY] = ", ".join([*values, hdrs.ACCEPT_ENCODING])
 
 
 def _should_compress(content_type: str) -> bool:

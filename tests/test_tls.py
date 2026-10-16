@@ -27,10 +27,17 @@ def test_secure_default_and_private_custom_trust(tls_certificates):
     assert tls_context(panel(tls_mode="system", tls_certificate="")) is True
     with (
         patch.object(ssl.SSLContext, "load_default_certs", side_effect=AssertionError("File I/O")),
-        patch.object(ssl.SSLContext, "set_default_verify_paths", side_effect=AssertionError("File I/O")),
+        patch.object(
+            ssl.SSLContext, "set_default_verify_paths", side_effect=AssertionError("File I/O")
+        ),
     ):
         first = tls_context(panel(tls_mode="custom", tls_certificate=tls_certificates["ca"]))
-        second = tls_context(panel(tls_mode="custom", tls_certificate=tls_certificates["ca"] + tls_certificates["valid"]))
+        second = tls_context(
+            panel(
+                tls_mode="custom",
+                tls_certificate=tls_certificates["ca"] + tls_certificates["valid"],
+            )
+        )
     assert first is not second
     assert first.check_hostname
     assert first.verify_mode == ssl.CERT_REQUIRED
@@ -39,24 +46,42 @@ def test_secure_default_and_private_custom_trust(tls_certificates):
     assert tls_context(panel(tls_mode="disabled")) is False
 
 
-@pytest.mark.parametrize("pem", [
-    "", " \n", "not a certificate", "-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----",
-    "ca+invalid", "ca+key", "ca+junk",
-])
+@pytest.mark.parametrize(
+    "pem",
+    [
+        "",
+        " \n",
+        "not a certificate",
+        "-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----",
+        "ca+invalid",
+        "ca+key",
+        "ca+junk",
+    ],
+)
 def test_invalid_pem_rejected(pem, tls_certificates):
     if pem.startswith("ca+"):
-        suffix = {"ca+invalid": "-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----",
-                  "ca+key": tls_certificates["key"], "ca+junk": "junk"}[pem]
+        suffix = {
+            "ca+invalid": "-----BEGIN CERTIFICATE-----\ninvalid\n-----END CERTIFICATE-----",
+            "ca+key": tls_certificates["key"],
+            "ca+junk": "junk",
+        }[pem]
         pem = tls_certificates["ca"] + suffix
     config = CONFIG_SCHEMA({DOMAIN: {"app": panel(tls_mode="custom", tls_certificate=pem)}})
     with pytest.raises(InvalidTLS, match="valid PEM"):
         _parse_config(Mock(), config)
 
 
-@pytest.mark.parametrize("settings", [
-    {"url": "http://localhost"}, {"work_mode": "iframe"}, {"work_mode": "auth"},
-    {"work_mode": "hassio"}, {"work_mode": "custom"}, {"tls_mode": "unknown"},
-])
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"url": "http://localhost"},
+        {"work_mode": "iframe"},
+        {"work_mode": "auth"},
+        {"work_mode": "hassio"},
+        {"work_mode": "custom"},
+        {"tls_mode": "unknown"},
+    ],
+)
 def test_non_proxy_tls_options_rejected(settings):
     with pytest.raises(InvalidTLS, match="HTTPS ingress or subapp"):
         tls_context(panel(**({"tls_mode": "disabled"} | settings)))
@@ -71,8 +96,11 @@ async def tls_server(hass, tmp_path, tls_certificates, socket_enabled):
 
     def handle_exception(loop, context):
         # Rejected TLS handshakes reset the fixture's incoming server transport.
-        if (context.get("message") == "Error on transport creation for incoming connection"
-                and isinstance(context.get("exception"), ConnectionResetError)):
+        if context.get(
+            "message"
+        ) == "Error on transport creation for incoming connection" and isinstance(
+            context.get("exception"), ConnectionResetError
+        ):
             return
         previous_handler(loop, context)
 
@@ -89,7 +117,10 @@ async def tls_server(hass, tmp_path, tls_certificates, socket_enabled):
             return result
 
         async def response(request):
-            return web.Response(text="trusted", headers={"X-Received-Auth": request.headers.get("Authorization", "")})
+            return web.Response(
+                text="trusted",
+                headers={"X-Received-Auth": request.headers.get("Authorization", "")},
+            )
 
         async def websocket(request):
             ws = web.WebSocketResponse()
@@ -114,18 +145,29 @@ async def tls_server(hass, tmp_path, tls_certificates, socket_enabled):
     loop.set_exception_handler(previous_handler)
 
 
-@pytest.mark.parametrize("server_certificate,trust,success", [
-    ("valid", "ca", True), ("valid", "valid", True), ("valid", "ca+valid", True),
-    ("self_signed", "self_signed", True),
-    ("wrong_host", "ca", False), ("wrong_host", "wrong_host", False),
-    ("expired", "ca", False), ("expired", "expired", False),
-    ("self_signed", "ca", False),
-])
-async def test_custom_tls_verifies_server_identity(tls_server, tls_certificates, server_certificate, trust, success):
+@pytest.mark.parametrize(
+    "server_certificate,trust,success",
+    [
+        ("valid", "ca", True),
+        ("valid", "valid", True),
+        ("valid", "ca+valid", True),
+        ("self_signed", "self_signed", True),
+        ("wrong_host", "ca", False),
+        ("wrong_host", "wrong_host", False),
+        ("expired", "ca", False),
+        ("expired", "expired", False),
+        ("self_signed", "ca", False),
+    ],
+)
+async def test_custom_tls_verifies_server_identity(
+    tls_server, tls_certificates, server_certificate, trust, success
+):
     url = await tls_server(server_certificate)
     pem = "".join(tls_certificates[name] for name in trust.split("+"))
     context = tls_context(panel(url=str(url), tls_mode="custom", tls_certificate=pem))
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(family=socket.AF_INET)) as session:
+    async with aiohttp.ClientSession(
+        connector=aiohttp.TCPConnector(family=socket.AF_INET)
+    ) as session:
         if not success:
             with pytest.raises(aiohttp.ClientConnectorCertificateError) as error:
                 await session.get(url, ssl=context)
@@ -142,18 +184,39 @@ async def test_custom_tls_verifies_server_identity(tls_server, tls_certificates,
 
 @pytest.mark.parametrize("mode", ["custom", "disabled"])
 async def test_proxy_http_and_websocket_keep_other_panels_secure(
-    hass, tls_server, tls_certificates, aiohttp_client, mode,
+    hass,
+    tls_server,
+    tls_certificates,
+    aiohttp_client,
+    mode,
 ):
     """The real proxy shares its HA session, but never shares a panel's TLS policy."""
     url = (await tls_server("self_signed")).with_host("127.0.0.1")
-    config = CONFIG_SCHEMA({DOMAIN: {
-        "secure": panel(url=str(url), static_token="secure-token"),
-        "custom": panel(url=str(url), static_token="custom-token", tls_mode=mode,
-                        tls_certificate=tls_certificates["self_signed"], headers={"Authorization": "secret"}),
-        "child": panel(url=str(url), static_token="child-token", work_mode="subapp", parent="custom"),
-        "custom_child": panel(url=str(url), static_token="custom_child-token", work_mode="subapp", parent="custom",
-                              tls_mode=mode, tls_certificate=tls_certificates["self_signed"]),
-    }})
+    config = CONFIG_SCHEMA(
+        {
+            DOMAIN: {
+                "secure": panel(url=str(url), static_token="secure-token"),
+                "custom": panel(
+                    url=str(url),
+                    static_token="custom-token",
+                    tls_mode=mode,
+                    tls_certificate=tls_certificates["self_signed"],
+                    headers={"Authorization": "secret"},
+                ),
+                "child": panel(
+                    url=str(url), static_token="child-token", work_mode="subapp", parent="custom"
+                ),
+                "custom_child": panel(
+                    url=str(url),
+                    static_token="custom_child-token",
+                    work_mode="subapp",
+                    parent="custom",
+                    tls_mode=mode,
+                    tls_certificate=tls_certificates["self_signed"],
+                ),
+            }
+        }
+    )
     store = IngressStore()
     await setup_domain(hass, {"config": store, "panels": set()}, config)
     session = async_get_clientsession(hass)
@@ -169,7 +232,9 @@ async def test_proxy_http_and_websocket_keep_other_panels_secure(
         client = await aiohttp_client(app)
         with patch.object(session, "ws_connect", wraps=session.ws_connect) as websocket:
             for slug in ("secure", "custom", "child", "custom_child", "secure"):
-                async with client.get(f"/api/ingress/{slug}/", cookies={"ingress_token": f"t-{slug}-token"}) as response:
+                async with client.get(
+                    f"/api/ingress/{slug}/", cookies={"ingress_token": f"t-{slug}-token"}
+                ) as response:
                     assert response.status == (200 if slug in ("custom", "custom_child") else 502)
                     if slug in ("custom", "custom_child"):
                         assert await response.text() == "trusted"
@@ -177,7 +242,9 @@ async def test_proxy_http_and_websocket_keep_other_panels_secure(
                         assert response.headers["X-Received-Auth"] == "secret"
                 assert http.call_args.kwargs["ssl"] is store.get(slug).ssl
             for slug in ("custom", "custom_child"):
-                async with client.ws_connect(f"/api/ingress/{slug}/ws", headers={"Cookie": f"ingress_token=t-{slug}-token"}) as ws:
+                async with client.ws_connect(
+                    f"/api/ingress/{slug}/ws", headers={"Cookie": f"ingress_token=t-{slug}-token"}
+                ) as ws:
                     assert (await ws.receive()).data == "trusted"
                     await ws.send_str("echo")
                     assert (await ws.receive()).data == "echo"
