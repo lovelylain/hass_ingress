@@ -27,7 +27,9 @@ def tls_context(panel) -> ssl.SSLContext | bool:
         or panel.get("work_mode", WorkMode.INGRESS) not in (WorkMode.INGRESS, WorkMode.SUBAPP)
         or not url.lower().startswith("https://")
     ):
-        raise InvalidTLS("invalid_tls_mode", "TLS options require an HTTPS ingress or subapp proxy.")
+        raise InvalidTLS(
+            "invalid_tls_mode", "TLS options require an HTTPS ingress or subapp proxy."
+        )
     if mode == TLSMode.DISABLED:
         return False
 

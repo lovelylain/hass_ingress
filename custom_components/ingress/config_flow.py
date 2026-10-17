@@ -1,4 +1,11 @@
-"""Configure Ingress panels with native Home Assistant forms."""
+"""Configure Ingress panels with native Home Assistant forms.
+
+Home Assistant 2025.8 and newer let every panel own a config subentry, so each
+ingress appears as its own row under *Settings -> Devices & services*. Older
+cores have no subentry support, so the same forms are offered through the
+integration's options flow and the panels are stored in the entry options.
+Both paths share the schema builders and validators below.
+"""
 
 from copy import deepcopy
 import re
@@ -19,15 +26,38 @@ try:
 except ImportError:
     import voluptuous as vol
 
-from . import (CONFIG_SCHEMA, CONF_SHOW_IN_SIDEBAR, CONF_UI_CONFIGURED,
-               _active_panels, _panel_subentry, _subentry_panels)
-from .const import CONF_TLS_CERTIFICATE, CONF_TLS_MODE, DOMAIN, ConfMode, RewriteMode, TLSMode, UIMode, WorkMode
+from . import CONFIG_SCHEMA, _active_panels
+from .compat import SUPPORTS_SUBENTRIES, async_update_and_abort, object_selector
+from .const import (
+    CONF_PANELS,
+    CONF_SHOW_IN_SIDEBAR,
+    CONF_TLS_CERTIFICATE,
+    CONF_TLS_MODE,
+    CONF_UI_CONFIGURED,
+    DOMAIN,
+    ConfMode,
+    RewriteMode,
+    TLSMode,
+    UIMode,
+    WorkMode,
+)
+from .panels import (
+    get_panels,
+    replace_panels,
+    entry_snapshot,
+    option_record,
+    option_records,
+)
 from .tls import InvalidTLS, tls_context
 
 CONNECT_TIMEOUT = 10
 DEFAULT_URL = "ha-ingress:8080"
 DEFAULT_TITLE = "Ingress"
 TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+
+# Cores without subentries cannot host a ConfigSubentryFlow subclass, so the
+# panel flow falls back to a plain object there and is never registered.
+_SubentryFlowBase = config_entries.ConfigSubentryFlow if SUPPORTS_SUBENTRIES else object
 
 
 class InvalidPanel(ValueError):
@@ -40,7 +70,7 @@ def _select(values, **config):
 
 def _panel_schema(editing=False):
     text = selector.TextSelector()
-    headers = selector.ObjectSelector(
+    headers = object_selector(
         {
             "multiple": True,
             "label_field": "name",
@@ -54,7 +84,7 @@ def _panel_schema(editing=False):
             },
         }
     )
-    rewrite = selector.ObjectSelector(
+    rewrite = object_selector(
         {
             "multiple": True,
             "label_field": "match",
@@ -84,8 +114,12 @@ def _panel_schema(editing=False):
                     {
                         vol.Optional("work_mode"): _select(WorkMode),
                         vol.Optional("ui_mode"): _select(UIMode),
-                        vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): _select(TLSMode, translation_key="tls_mode"),
-                        vol.Optional(CONF_TLS_CERTIFICATE): selector.TextSelector({"multiline": True}),
+                        vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): _select(
+                            TLSMode, translation_key="tls_mode"
+                        ),
+                        vol.Optional(CONF_TLS_CERTIFICATE): selector.TextSelector(
+                            {"multiline": True}
+                        ),
                         vol.Optional("index"): text,
                         vol.Optional("parent"): text,
                         vol.Optional("cookie_name"): text,
@@ -110,26 +144,42 @@ def _panel_schema(editing=False):
 def _panel_form(panel):
     """Represent every persisted field in the editable form."""
     panel = deepcopy(panel)
-    basic = {key: panel.pop(key) for key in ("title", "icon", "url", "require_admin") if key in panel}
+    basic = {
+        key: panel.pop(key) for key in ("title", "icon", "url", "require_admin") if key in panel
+    }
     if isinstance(basic["url"], dict):
         dynamic = basic["url"]
         basic["url"] = dynamic["default"]
         panel.update(url_match=dynamic["match"], url_replace=dynamic["replace"])
     if "headers" in panel:
-        panel["headers"] = [{"name": name, "value": value} for name, value in panel["headers"].items()]
+        panel["headers"] = [
+            {"name": name, "value": value} for name, value in panel["headers"].items()
+        ]
     basic["advanced"] = panel
     return basic
 
 
 def _panel_from_form(user_input):
     """Convert graphical rows to the integration's existing configuration."""
-    panel = {key: value for key, value in user_input.items() if key not in ("slug", "advanced", CONF_SHOW_IN_SIDEBAR) and value != ""}
-    panel.update({key: value for key, value in user_input.get("advanced", {}).items() if value not in ("", None)})
+    panel = {
+        key: value
+        for key, value in user_input.items()
+        if key not in ("slug", "advanced", CONF_SHOW_IN_SIDEBAR) and value != ""
+    }
+    panel.update(
+        {
+            key: value
+            for key, value in user_input.get("advanced", {}).items()
+            if value not in ("", None)
+        }
+    )
     if "headers" in panel:
         rows = panel["headers"]
         if not isinstance(rows, list) or any(
-            not isinstance(row, dict) or set(row) != {"name", "value"}
-            or not isinstance(row["name"], str) or not isinstance(row["value"], str)
+            not isinstance(row, dict)
+            or set(row) != {"name", "value"}
+            or not isinstance(row["name"], str)
+            or not isinstance(row["value"], str)
             for row in rows
         ):
             raise InvalidPanel("invalid_headers")
@@ -162,13 +212,21 @@ def _panel_from_form(user_input):
 
 
 def _validate_url(value, mode):
-    if not isinstance(value, str) or not value or any(char.isspace() or ord(char) < 32 for char in value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or any(char.isspace() or ord(char) < 32 for char in value)
+    ):
         raise InvalidPanel("invalid_url")
     if mode == WorkMode.HASSIO:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", value):
             raise InvalidPanel("invalid_url")
         return
-    if mode in (WorkMode.IFRAME, WorkMode.CUSTOM) and value.startswith("/") and not value.startswith("//"):
+    if (
+        mode in (WorkMode.IFRAME, WorkMode.CUSTOM)
+        and value.startswith("/")
+        and not value.startswith("//")
+    ):
         return
     if mode in (WorkMode.IFRAME, WorkMode.CUSTOM) and "://" not in value:
         raise InvalidPanel("invalid_url")
@@ -187,7 +245,9 @@ def _validate_panels(hass, panels):
     except (schema_vol.Invalid, vol.Invalid, TypeError, ValueError) as err:
         raise InvalidPanel("invalid_panel") from err
     routes = set()
-    foreign_routes = set(hass.data.get(DATA_PANELS, {})) - set(hass.data.get(DOMAIN, {}).get("panels", set()))
+    foreign_routes = set(hass.data.get(DATA_PANELS, {})) - set(
+        hass.data.get(DOMAIN, {}).get("panels", set())
+    )
     for slug, panel in panels.items():
         mode = panel["work_mode"]
         url = panel["url"]
@@ -201,7 +261,10 @@ def _validate_panels(hass, panels):
         headers = panel.get("headers", {})
         if len({key.lower() for key in headers}) != len(headers):
             raise InvalidPanel("duplicate_headers")
-        if any(not TOKEN.fullmatch(key) or any(char in value for char in "\r\n\0") for key, value in headers.items()):
+        if any(
+            not TOKEN.fullmatch(key) or any(char in value for char in "\r\n\0")
+            for key, value in headers.items()
+        ):
             raise InvalidPanel("invalid_headers")
         for key in ("cookie_name", "static_token"):
             if key in panel and not TOKEN.fullmatch(panel[key]):
@@ -226,7 +289,9 @@ def _validate_panels(hass, panels):
                 raise InvalidPanel("invalid_parent")
             seen.add(ancestor)
             ancestor = panels[ancestor].get("parent")
-        if mode == WorkMode.SUBAPP and (not parent or panels[parent]["work_mode"] != WorkMode.INGRESS):
+        if mode == WorkMode.SUBAPP and (
+            not parent or panels[parent]["work_mode"] != WorkMode.INGRESS
+        ):
             raise InvalidPanel("invalid_parent")
         if parent:
             child = slug.removeprefix(f"{parent}_")
@@ -247,6 +312,182 @@ def _validate_panels(hass, panels):
     return panels
 
 
+def _checked_panel(hass, panels, slug, user_input):
+    """Validate one submitted panel form against the panels it will join."""
+    panel = _panel_from_form(user_input)
+    if not panel.get("title", "").strip():
+        raise InvalidPanel("invalid_panel")
+    candidate, unavailable = _active_panels(panels | {slug: panel})
+    if slug in unavailable:
+        raise InvalidPanel("invalid_parent")
+    return _validate_panels(hass, candidate)[slug]
+
+
+class IngressPanelFlow(_SubentryFlowBase):
+    """Configure a panel directly from its integration row (HA 2025.8+)."""
+
+    def __init__(self):
+        self._snapshot = None
+        self._slug = None
+
+    async def async_step_user(self, user_input=None):
+        return await self._async_panel("user", user_input)
+
+    async def async_step_reconfigure(self, user_input=None):
+        if self._snapshot is None:
+            self._slug = self._get_reconfigure_subentry().unique_id
+        return await self._async_panel("reconfigure", user_input)
+
+    async def _async_panel(self, step_id, user_input):
+        entry = self._get_entry()
+        if self._snapshot is None:
+            self._snapshot = entry_snapshot(entry)
+        elif self._snapshot != entry_snapshot(entry):
+            return self.async_abort(reason="configuration_changed")
+        if entry.data[CONF_MODE] != ConfMode.UI:
+            return self.async_abort(
+                reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels"
+            )
+        panels = get_panels(entry)
+        errors = {}
+        if user_input is not None:
+            slug = self._slug if step_id == "reconfigure" else user_input["slug"]
+            if step_id == "user" and slug in panels:
+                errors["slug"] = "duplicate_panel"
+            else:
+                try:
+                    panel = _checked_panel(self.hass, panels, slug, user_input)
+                except InvalidPanel as err:
+                    errors["base"] = str(err)
+                else:
+                    title = panel.pop("title")
+                    panel[CONF_SHOW_IN_SIDEBAR] = user_input.get(CONF_SHOW_IN_SIDEBAR, True)
+                    if step_id == "reconfigure":
+                        return self.async_update_and_abort(
+                            entry, self._get_reconfigure_subentry(), title=title, data=panel
+                        )
+                    return self.async_create_entry(title=title, data=panel, unique_id=slug)
+        suggested = user_input
+        if suggested is None and self._slug is not None:
+            subentry = self._get_reconfigure_subentry()
+            panel = deepcopy(dict(subentry.data))
+            visible = panel.pop(CONF_SHOW_IN_SIDEBAR, True)
+            suggested = _panel_form(panel | {"title": subentry.title}) | {
+                CONF_SHOW_IN_SIDEBAR: visible
+            }
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                _panel_schema(step_id == "reconfigure"), suggested
+            ),
+            errors=errors,
+            description_placeholders={"slug": self._slug or ""},
+        )
+
+
+class IngressOptionsFlow(config_entries.OptionsFlow):
+    """Manage panels through the entry options on cores without subentries.
+
+    The forms, validation and stored fields are identical to the subentry flow;
+    only the place the panels are kept and the way they are reached differ.
+    """
+
+    def __init__(self):
+        self._snapshot = None
+        self._slug = None
+
+    async def async_step_init(self, user_input=None):
+        entry = self.config_entry
+        if entry.data[CONF_MODE] != ConfMode.UI:
+            return self.async_abort(
+                reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels"
+            )
+        if not get_panels(entry):
+            return await self.async_step_add()
+        return self.async_show_menu(menu_options=["add", "edit", "delete"])
+
+    async def async_step_add(self, user_input=None):
+        return await self._async_panel("add", user_input)
+
+    async def async_step_edit(self, user_input=None):
+        if self._slug is None:
+            # Picking the panel is its own step: the edit form's description needs
+            # the slug, which is only known once a panel has been chosen.
+            return self._select_panel("select_edit")
+        return await self._async_panel("edit", user_input)
+
+    async def async_step_select_edit(self, user_input=None):
+        self._slug = user_input["slug"]
+        return await self._async_panel("edit", None)
+
+    async def async_step_delete(self, user_input=None):
+        if user_input is not None:
+            if (stale := self._stale_form()) is not None:
+                return stale
+            stored = option_records(self.config_entry)
+            stored.pop(user_input["slug"], None)
+            return self.async_create_entry(
+                title="", data={**dict(self.config_entry.options), CONF_PANELS: stored}
+            )
+        return self._select_panel("delete")
+
+    def _stale_form(self):
+        """Reject a form that was filled in before the configuration changed."""
+        entry = self.config_entry
+        if self._snapshot is None:
+            self._snapshot = entry_snapshot(entry)
+        elif self._snapshot != entry_snapshot(entry):
+            return self.async_abort(reason="configuration_changed")
+
+    def _select_panel(self, step_id):
+        if (stale := self._stale_form()) is not None:
+            return stale
+        panels = get_panels(self.config_entry)
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema({vol.Required("slug"): _select(panels)}),
+        )
+
+    async def _async_panel(self, step_id, user_input):
+        entry = self.config_entry
+        if (stale := self._stale_form()) is not None:
+            return stale
+        panels = get_panels(entry)
+        errors = {}
+        if user_input is not None:
+            slug = self._slug if step_id == "edit" else user_input["slug"]
+            if step_id == "add" and slug in panels:
+                errors["slug"] = "duplicate_panel"
+            else:
+                try:
+                    panel = _checked_panel(self.hass, panels, slug, user_input)
+                except InvalidPanel as err:
+                    errors["base"] = str(err)
+                else:
+                    title = panel.pop("title")
+                    stored = option_records(entry)
+                    stored[slug] = option_record(
+                        slug, panel, title, user_input.get(CONF_SHOW_IN_SIDEBAR, True)
+                    )
+                    return self.async_create_entry(
+                        title="", data={**dict(entry.options), CONF_PANELS: stored}
+                    )
+        suggested = user_input
+        if suggested is None and self._slug is not None:
+            record = option_records(entry)[self._slug]
+            visible = record.get(CONF_SHOW_IN_SIDEBAR, True)
+            panel = {key: value for key, value in record.items() if key != CONF_SHOW_IN_SIDEBAR}
+            suggested = _panel_form(panel) | {CONF_SHOW_IN_SIDEBAR: visible}
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                _panel_schema(step_id == "edit"), suggested
+            ),
+            errors=errors,
+            description_placeholders={"slug": self._slug or ""},
+        )
+
+
 class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Ingress config flow."""
 
@@ -256,10 +497,19 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._data = {}
         self._snapshot = None
 
-    @classmethod
-    @callback
-    def async_get_supported_subentry_types(cls, config_entry):
-        return {"panel": IngressPanelFlow}
+    if SUPPORTS_SUBENTRIES:
+
+        @classmethod
+        @callback
+        def async_get_supported_subentry_types(cls, config_entry):
+            return {"panel": IngressPanelFlow}
+
+    else:
+
+        @staticmethod
+        @callback
+        def async_get_options_flow(config_entry):
+            return IngressOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Select local UI, external agent, or YAML configuration."""
@@ -271,12 +521,20 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_my_agent()
             if self._data[CONF_MODE] == ConfMode.UI and self._snapshot is not None:
                 entry = self._get_reconfigure_entry()
-                if entry.data[CONF_MODE] == ConfMode.YAML and not entry.data.get(CONF_UI_CONFIGURED):
+                if entry.data[CONF_MODE] == ConfMode.YAML and not entry.data.get(
+                    CONF_UI_CONFIGURED
+                ):
                     return await self.async_step_import_yaml()
             return await self.async_step_my_setup()
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema({vol.Required(CONF_MODE, default=self._data.get(CONF_MODE, ConfMode.UI)): _select(ConfMode, translation_key="configuration_mode")}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_MODE, default=self._data.get(CONF_MODE, ConfMode.UI)
+                    ): _select(ConfMode, translation_key="configuration_mode")
+                }
+            ),
         )
 
     async def async_step_my_agent(self, user_input: dict[str, Any] | None = None):
@@ -314,14 +572,15 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_my_setup(self, panels=None):
         if entries := self._async_current_entries():
             entry = entries[0]
-            if self._snapshot != _entry_snapshot(entry):
+            if self._snapshot != entry_snapshot(entry):
                 return self.async_abort(reason="configuration_changed")
             if panels is not None:
-                for slug, panel in panels.items():
-                    self.hass.config_entries.async_add_subentry(entry, _panel_subentry(slug, panel))
+                replace_panels(self.hass, entry, panels)
             if self._data[CONF_MODE] == ConfMode.UI:
                 self._data[CONF_UI_CONFIGURED] = True
-            result = self.async_update_and_abort(entry, data=self._data, reason="reconfigure_successful")
+            result = async_update_and_abort(
+                self, entry, data=self._data, reason="reconfigure_successful"
+            )
             if not entry.update_listeners:
                 self.hass.config_entries.async_schedule_reload(entry.entry_id)
             return result
@@ -332,7 +591,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
         entry = self._get_reconfigure_entry()
         self._data = deepcopy(dict(entry.data))
-        self._snapshot = _entry_snapshot(entry)
+        self._snapshot = entry_snapshot(entry)
         return await self.async_step_user(user_input)
 
     async def async_step_import_yaml(self, user_input=None):
@@ -355,7 +614,9 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     return await self.async_step_my_setup(panels)
         return self.async_show_form(
             step_id="import_yaml",
-            data_schema=vol.Schema({vol.Required("confirm", default=False): selector.BooleanSelector()}),
+            data_schema=vol.Schema(
+                {vol.Required("confirm", default=False): selector.BooleanSelector()}
+            ),
             errors=errors,
         )
 
@@ -364,67 +625,3 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
         self._data[CONF_MODE] = ConfMode.YAML
         return await self.async_step_my_setup()
-
-
-def _entry_snapshot(entry):
-    return deepcopy((dict(entry.data), dict(entry.options), {key: value.as_dict() for key, value in entry.subentries.items()}))
-
-
-class IngressPanelFlow(config_entries.ConfigSubentryFlow):
-    """Configure a panel directly from its integration row."""
-
-    def __init__(self):
-        self._snapshot = None
-        self._slug = None
-
-    async def async_step_user(self, user_input=None):
-        return await self._async_panel("user", user_input)
-
-    async def async_step_reconfigure(self, user_input=None):
-        if self._snapshot is None:
-            self._slug = self._get_reconfigure_subentry().unique_id
-        return await self._async_panel("reconfigure", user_input)
-
-    async def _async_panel(self, step_id, user_input):
-        entry = self._get_entry()
-        if self._snapshot is None:
-            self._snapshot = _entry_snapshot(entry)
-        elif self._snapshot != _entry_snapshot(entry):
-            return self.async_abort(reason="configuration_changed")
-        if entry.data[CONF_MODE] != ConfMode.UI:
-            return self.async_abort(reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels")
-        panels = _subentry_panels(entry)
-        errors = {}
-        if user_input is not None:
-            slug = self._slug if step_id == "reconfigure" else user_input["slug"]
-            if step_id == "user" and slug in panels:
-                errors["slug"] = "duplicate_panel"
-            else:
-                try:
-                    panel = _panel_from_form(user_input)
-                    if not panel.get("title", "").strip():
-                        raise InvalidPanel("invalid_panel")
-                    candidate, unavailable = _active_panels(panels | {slug: panel})
-                    if slug in unavailable:
-                        raise InvalidPanel("invalid_parent")
-                    panel = _validate_panels(self.hass, candidate)[slug]
-                except InvalidPanel as err:
-                    errors["base"] = str(err)
-                else:
-                    title = panel.pop("title")
-                    panel[CONF_SHOW_IN_SIDEBAR] = user_input.get(CONF_SHOW_IN_SIDEBAR, True)
-                    if step_id == "reconfigure":
-                        return self.async_update_and_abort(entry, self._get_reconfigure_subentry(), title=title, data=panel)
-                    return self.async_create_entry(title=title, data=panel, unique_id=slug)
-        suggested = user_input
-        if suggested is None and self._slug is not None:
-            subentry = self._get_reconfigure_subentry()
-            panel = deepcopy(dict(subentry.data))
-            visible = panel.pop(CONF_SHOW_IN_SIDEBAR, True)
-            suggested = _panel_form(panel | {"title": subentry.title}) | {CONF_SHOW_IN_SIDEBAR: visible}
-        return self.async_show_form(
-            step_id=step_id,
-            data_schema=self.add_suggested_values_to_schema(_panel_schema(step_id == "reconfigure"), suggested),
-            errors=errors,
-            description_placeholders={"slug": self._slug or ""},
-        )

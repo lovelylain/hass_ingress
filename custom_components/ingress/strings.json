@@ -91,6 +91,7 @@
                 "cookie_name": "Cookie name",
                 "static_token": "Static token",
                 "expire_time": "Token lifetime",
+                "enable_compress": "Compress responses",
                 "url_match": "Dynamic URL match pattern",
                 "url_replace": "Dynamic URL replacement",
                 "headers": "Request headers",
@@ -132,6 +133,7 @@
                 "cookie_name": "Cookie name",
                 "static_token": "Static token",
                 "expire_time": "Token lifetime",
+                "enable_compress": "Compress responses",
                 "url_match": "Dynamic URL match pattern",
                 "url_replace": "Dynamic URL replacement",
                 "headers": "Request headers",
@@ -176,6 +178,135 @@
         "reconfigure_successful": "Reconfiguration was successful."
       },
       "entry_type": "Ingress"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ingress",
+        "menu_options": {
+          "add": "Add ingress",
+          "edit": "Edit ingress",
+          "delete": "Delete ingress"
+        }
+      },
+      "add": {
+        "title": "Add ingress",
+        "description": "Enter the panel address and sidebar details. Open Advanced to configure child panels, authentication, dynamic URLs, headers, and ordered response rewrites. Empty optional fields remove the saved setting. Header values and static tokens are stored in the Home Assistant configuration entry; static tokens remain valid until changed.",
+        "data": {
+          "slug": "Panel identifier",
+          "title": "Panel name",
+          "icon": "Sidebar icon",
+          "url": "Primary URL or add-on slug",
+          "require_admin": "Administrator-only sidebar",
+          "show_in_sidebar": "Show in sidebar"
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "work_mode": "Work mode",
+              "ui_mode": "Display mode",
+              "index": "Index path",
+              "parent": "Parent panel slug",
+              "cookie_name": "Cookie name",
+              "static_token": "Static token",
+              "expire_time": "Token lifetime",
+              "enable_compress": "Compress responses",
+              "url_match": "Dynamic URL match pattern",
+              "url_replace": "Dynamic URL replacement",
+              "headers": "Request headers",
+              "rewrite": "Response rewrites (in order)",
+              "tls_mode": "HTTPS certificate verification",
+              "tls_certificate": "Trusted certificate(s) in PEM format"
+            },
+            "data_description": {
+              "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
+              "headers": "Values are stored in the Home Assistant configuration entry.",
+              "tls_mode": "For HTTPS ingress and subapp proxies only. Warning: ignoring certificate errors disables server identity verification. Configured credentials can reach an impersonating server.",
+              "tls_certificate": "Required for provided certificate trust. Paste CA or server certificates, without private keys. Hostname, chain, and expiry verification still apply. Other panels keep their own trust settings."
+            }
+          }
+        },
+        "data_description": {
+          "url": "Dynamic URLs use this address as their default. Proxy modes accept a host and port. Iframe and custom modes also accept a /relative URL.",
+          "require_admin": "Controls sidebar visibility; it does not add backend authorization."
+        }
+      },
+      "edit": {
+        "title": "Configure ingress",
+        "description": "Panel slug: {slug}. The slug cannot be changed.\n\nEnter the panel address and sidebar details. Open Advanced to configure child panels, authentication, dynamic URLs, headers, and ordered response rewrites. Empty optional fields remove the saved setting. Header values and static tokens are stored in the Home Assistant configuration entry; static tokens remain valid until changed.",
+        "data": {
+          "title": "Panel name",
+          "icon": "Sidebar icon",
+          "url": "Primary URL or add-on slug",
+          "require_admin": "Administrator-only sidebar",
+          "show_in_sidebar": "Show in sidebar"
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "work_mode": "Work mode",
+              "ui_mode": "Display mode",
+              "index": "Index path",
+              "parent": "Parent panel slug",
+              "cookie_name": "Cookie name",
+              "static_token": "Static token",
+              "expire_time": "Token lifetime",
+              "enable_compress": "Compress responses",
+              "url_match": "Dynamic URL match pattern",
+              "url_replace": "Dynamic URL replacement",
+              "headers": "Request headers",
+              "rewrite": "Response rewrites (in order)",
+              "tls_mode": "HTTPS certificate verification",
+              "tls_certificate": "Trusted certificate(s) in PEM format"
+            },
+            "data_description": {
+              "static_token": "Creates a public access link that bypasses Home Assistant login. Leave empty to require login.",
+              "headers": "Values are stored in the Home Assistant configuration entry.",
+              "tls_mode": "For HTTPS ingress and subapp proxies only. Warning: ignoring certificate errors disables server identity verification. Configured credentials can reach an impersonating server.",
+              "tls_certificate": "Required for provided certificate trust. Paste CA or server certificates, without private keys. Hostname, chain, and expiry verification still apply. Other panels keep their own trust settings."
+            }
+          }
+        },
+        "data_description": {
+          "url": "Dynamic URLs use this address as their default. Proxy modes accept a host and port. Iframe and custom modes also accept a /relative URL.",
+          "require_admin": "Controls sidebar visibility; it does not add backend authorization."
+        }
+      },
+      "delete": {
+        "title": "Delete ingress",
+        "description": "Choose the ingress to remove. Its route, tokens and sidebar entry are removed immediately.",
+        "data": {
+          "slug": "Panel identifier"
+        }
+      },
+      "select_edit": {
+        "title": "Edit ingress",
+        "description": "Choose the ingress to configure. Its route, tokens and sidebar entry stay as they are until you save.",
+        "data": {
+          "slug": "Panel identifier"
+        }
+      }
+    },
+    "error": {
+      "invalid_panel": "Enter a valid panel slug and configuration.",
+      "invalid_url": "Enter a valid HTTP(S) URL or host and port for a proxy, a /relative or HTTP(S) URL for an iframe or custom panel, or an add-on slug for an add-on panel.",
+      "invalid_regex": "Check the regular expressions and replacement groups. Rewrites use Python syntax; dynamic URLs use JavaScript replacement syntax ($1, $2).",
+      "duplicate_headers": "Header names must be unique, ignoring letter case.",
+      "invalid_headers": "Use valid HTTP header names and values without line breaks.",
+      "invalid_token": "Cookie names and static tokens must contain only HTTP token characters.",
+      "invalid_parent": "Choose an existing parent without cycles. A subapp needs an ingress parent; other child panels need a top-level parent.",
+      "route_conflict": "This panel route is already used by another panel.",
+      "duplicate_panel": "A panel with this slug already exists.",
+      "invalid_tls_mode": "TLS options apply only to HTTPS proxies in ingress or subapp mode.",
+      "invalid_tls_certificate": "Paste one or more valid PEM CA or server certificates, including the BEGIN CERTIFICATE and END CERTIFICATE lines."
+    },
+    "abort": {
+      "configuration_changed": "Configuration changed while this form was open. Reopen it to use the latest settings.",
+      "agent_panels": "These panels are managed by the external agent. Configure them there, or use Reconfigure to switch to the local UI.",
+      "yaml_panels": "These panels are managed in configuration.yaml. Use Reconfigure to import them into the local UI."
     }
   },
   "issues": {

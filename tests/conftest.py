@@ -37,20 +37,38 @@ def tls_certificates():
             .not_valid_before(now - timedelta(days=3))
             .not_valid_after(now + timedelta(days=30) if not expired else now - timedelta(days=1))
             .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
-            .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(signing_key.public_key()), critical=False)
-            .add_extension(x509.KeyUsage(
-                digital_signature=True, content_commitment=False, key_encipherment=not ca,
-                data_encipherment=False, key_agreement=False, key_cert_sign=ca,
-                crl_sign=ca, encipher_only=False, decipher_only=False,
-            ), critical=True)
+            .add_extension(
+                x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False
+            )
+            .add_extension(
+                x509.AuthorityKeyIdentifier.from_issuer_public_key(signing_key.public_key()),
+                critical=False,
+            )
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=True,
+                    content_commitment=False,
+                    key_encipherment=not ca,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=ca,
+                    crl_sign=ca,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
         )
         if not ca:
             names = [x509.DNSName(host)]
             if host == "localhost":
                 names.append(x509.IPAddress(ip_address("127.0.0.1")))
             builder = builder.add_extension(x509.SubjectAlternativeName(names), critical=False)
-        return builder.sign(signing_key, hashes.SHA256()).public_bytes(serialization.Encoding.PEM).decode()
+        return (
+            builder.sign(signing_key, hashes.SHA256())
+            .public_bytes(serialization.Encoding.PEM)
+            .decode()
+        )
 
     return {
         "ca": certificate("", ca=True),
@@ -59,7 +77,8 @@ def tls_certificates():
         "expired": certificate("localhost", expired=True),
         "self_signed": certificate("localhost", self_signed=True),
         "key": server_key.private_bytes(
-            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         ).decode(),
     }
