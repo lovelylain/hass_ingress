@@ -13,7 +13,6 @@ from typing import Any
 
 from homeassistant import config_entries
 from homeassistant.components.frontend import DATA_PANELS
-from homeassistant.const import CONF_MODE, CONF_URL
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers import selector
@@ -26,14 +25,9 @@ try:
 except ImportError:
     import voluptuous as vol
 
-from . import CONFIG_SCHEMA, _active_panels
+from . import CONFIG_SCHEMA, _active_panels, const
 from .compat import SUPPORTS_SUBENTRIES, async_update_and_abort, object_selector
 from .const import (
-    CONF_PANELS,
-    CONF_SHOW_IN_SIDEBAR,
-    CONF_TLS_CERTIFICATE,
-    CONF_TLS_MODE,
-    CONF_UI_CONFIGURED,
     DOMAIN,
     ConfMode,
     RewriteMode,
@@ -87,7 +81,7 @@ def _panel_schema(editing=False):
     rewrite = object_selector(
         {
             "multiple": True,
-            "label_field": "match",
+            "label_field": const.CONF_MATCH,
             "fields": {
                 "mode": {
                     "label": "Rewrite mode",
@@ -96,42 +90,50 @@ def _panel_schema(editing=False):
                 },
                 "path": {"label": "Request path pattern", "selector": {"text": {}}},
                 "name": {"label": "Header or content type pattern", "selector": {"text": {}}},
-                "match": {"label": "Match pattern", "required": True, "selector": {"text": {}}},
-                "replace": {"label": "Replacement", "selector": {"text": {}}},
+                const.CONF_MATCH: {
+                    "label": "Match pattern",
+                    "required": True,
+                    "selector": {"text": {}},
+                },
+                const.CONF_REPLACE: {"label": "Replacement", "selector": {"text": {}}},
             },
         }
     )
     fields = {} if editing else {vol.Required("slug"): text}
     fields.update(
         {
-            vol.Required("title"): text,
-            vol.Required(CONF_SHOW_IN_SIDEBAR, default=True): selector.BooleanSelector(),
+            vol.Required(const.CONF_TITLE): text,
+            vol.Required(const.CONF_SHOW_IN_SIDEBAR, default=True): selector.BooleanSelector(),
             vol.Optional("icon"): selector.IconSelector(),
             vol.Required("url"): text,
             vol.Required("require_admin", default=False): selector.BooleanSelector(),
             vol.Optional("advanced"): section(
                 vol.Schema(
                     {
-                        vol.Optional("work_mode"): _select(WorkMode),
-                        vol.Optional("ui_mode"): _select(UIMode),
-                        vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): _select(
+                        vol.Optional(const.CONF_WORK_MODE): _select(WorkMode),
+                        vol.Optional(const.CONF_UI_MODE): _select(UIMode),
+                        vol.Optional(const.CONF_TLS_MODE, default=TLSMode.SYSTEM): _select(
                             TLSMode, translation_key="tls_mode"
                         ),
-                        vol.Optional(CONF_TLS_CERTIFICATE): selector.TextSelector(
+                        vol.Optional(const.CONF_TLS_CERTIFICATE): selector.TextSelector(
                             {"multiline": True}
                         ),
-                        vol.Optional("index"): text,
-                        vol.Optional("parent"): text,
-                        vol.Optional("cookie_name"): text,
-                        vol.Optional("static_token"): selector.TextSelector({"type": "password"}),
-                        vol.Optional("expire_time"): selector.NumberSelector(
+                        vol.Optional(const.CONF_INDEX): text,
+                        vol.Optional(const.CONF_PARENT): text,
+                        vol.Optional(const.CONF_COOKIE_NAME): text,
+                        vol.Optional(const.CONF_STATIC_TOKEN): selector.TextSelector(
+                            {"type": "password"}
+                        ),
+                        vol.Optional(const.CONF_EXPIRE_TIME): selector.NumberSelector(
                             {"min": 0, "step": 1, "mode": "box", "unit_of_measurement": "seconds"}
                         ),
-                        vol.Optional("enable_compress", default=False): selector.BooleanSelector(),
+                        vol.Optional(
+                            const.CONF_ENABLE_COMPRESS, default=False
+                        ): selector.BooleanSelector(),
                         vol.Optional("url_match"): text,
                         vol.Optional("url_replace"): text,
                         vol.Optional("headers"): headers,
-                        vol.Optional("rewrite"): rewrite,
+                        vol.Optional(const.CONF_REWRITE): rewrite,
                     }
                 ),
                 {"collapsed": True},
@@ -145,12 +147,14 @@ def _panel_form(panel):
     """Represent every persisted field in the editable form."""
     panel = deepcopy(panel)
     basic = {
-        key: panel.pop(key) for key in ("title", "icon", "url", "require_admin") if key in panel
+        key: panel.pop(key)
+        for key in (const.CONF_TITLE, "icon", "url", "require_admin")
+        if key in panel
     }
     if isinstance(basic["url"], dict):
         dynamic = basic["url"]
         basic["url"] = dynamic["default"]
-        panel.update(url_match=dynamic["match"], url_replace=dynamic["replace"])
+        panel.update(url_match=dynamic[const.CONF_MATCH], url_replace=dynamic[const.CONF_REPLACE])
     if "headers" in panel:
         panel["headers"] = [
             {"name": name, "value": value} for name, value in panel["headers"].items()
@@ -164,7 +168,7 @@ def _panel_from_form(user_input):
     panel = {
         key: value
         for key, value in user_input.items()
-        if key not in ("slug", "advanced", CONF_SHOW_IN_SIDEBAR) and value != ""
+        if key not in ("slug", "advanced", const.CONF_SHOW_IN_SIDEBAR) and value != ""
     }
     panel.update(
         {
@@ -187,27 +191,34 @@ def _panel_from_form(user_input):
         if len(set(names)) != len(names):
             raise InvalidPanel("duplicate_headers")
         panel["headers"] = {row["name"]: row["value"] for row in rows}
-    if "rewrite" in panel:
-        rows = panel["rewrite"]
+    if const.CONF_REWRITE in panel:
+        rows = panel[const.CONF_REWRITE]
         if not isinstance(rows, list) or any(
             not isinstance(row, dict)
-            or not {"mode", "match"} <= row.keys()
-            or row.keys() - {"mode", "path", "name", "match", "replace"}
+            or not {"mode", const.CONF_MATCH} <= row.keys()
+            or row.keys() - {"mode", "path", "name", const.CONF_MATCH, const.CONF_REPLACE}
             or any(not isinstance(value, str) for value in row.values())
             or row["mode"] not in RewriteMode
             for row in rows
         ):
             raise InvalidPanel("invalid_panel")
-        panel["rewrite"] = [{"replace": "", **row} for row in rows]
-    if "expire_time" in panel and int(panel["expire_time"]) != panel["expire_time"]:
+        panel[const.CONF_REWRITE] = [{const.CONF_REPLACE: "", **row} for row in rows]
+    if (
+        const.CONF_EXPIRE_TIME in panel
+        and int(panel[const.CONF_EXPIRE_TIME]) != panel[const.CONF_EXPIRE_TIME]
+    ):
         raise InvalidPanel("invalid_panel")
     match, replace = panel.pop("url_match", ""), panel.pop("url_replace", "")
     if match or replace:
         if not match:
             raise InvalidPanel("invalid_regex")
-        panel["url"] = {"default": panel.get("url", ""), "match": match, "replace": replace}
-    if panel.get(CONF_TLS_MODE, TLSMode.SYSTEM) != TLSMode.CUSTOM:
-        panel.pop(CONF_TLS_CERTIFICATE, None)
+        panel["url"] = {
+            "default": panel.get("url", ""),
+            const.CONF_MATCH: match,
+            const.CONF_REPLACE: replace,
+        }
+    if panel.get(const.CONF_TLS_MODE, TLSMode.SYSTEM) != TLSMode.CUSTOM:
+        panel.pop(const.CONF_TLS_CERTIFICATE, None)
     return panel
 
 
@@ -249,14 +260,14 @@ def _validate_panels(hass, panels):
         hass.data.get(DOMAIN, {}).get("panels", set())
     )
     for slug, panel in panels.items():
-        mode = panel["work_mode"]
+        mode = panel[const.CONF_WORK_MODE]
         url = panel["url"]
         _validate_url(url["default"] if isinstance(url, dict) else url, mode)
         try:
             tls_context(panel)
         except InvalidTLS as err:
             raise InvalidPanel(err.reason) from err
-        if isinstance(url, dict) and not url["match"]:
+        if isinstance(url, dict) and not url[const.CONF_MATCH]:
             raise InvalidPanel("invalid_regex")
         headers = panel.get("headers", {})
         if len({key.lower() for key in headers}) != len(headers):
@@ -266,38 +277,40 @@ def _validate_panels(hass, panels):
             for key, value in headers.items()
         ):
             raise InvalidPanel("invalid_headers")
-        for key in ("cookie_name", "static_token"):
+        for key in (const.CONF_COOKIE_NAME, const.CONF_STATIC_TOKEN):
             if key in panel and not TOKEN.fullmatch(panel[key]):
                 raise InvalidPanel("invalid_token")
-        if any(char in panel["index"] for char in "\r\n\0"):
+        if any(char in panel[const.CONF_INDEX] for char in "\r\n\0"):
             raise InvalidPanel("invalid_panel")
-        for rule in panel.get("rewrite", []):
+        for rule in panel.get(const.CONF_REWRITE, []):
             try:
                 for field in ("path", "name"):
                     re.compile(rule.get(field, ""))
                 if rule["mode"] == RewriteMode.BODY:
-                    re.compile(rule["match"].encode()).sub(rule["replace"].encode(), b"")
+                    re.compile(rule[const.CONF_MATCH].encode()).sub(
+                        rule[const.CONF_REPLACE].encode(), b""
+                    )
                 else:
-                    re.compile(rule["match"]).sub(rule["replace"], "")
+                    re.compile(rule[const.CONF_MATCH]).sub(rule[const.CONF_REPLACE], "")
             except (re.error, ValueError) as err:
                 raise InvalidPanel("invalid_regex") from err
-        parent = panel.get("parent")
+        parent = panel.get(const.CONF_PARENT)
         seen = {slug}
         ancestor = parent
         while ancestor:
             if ancestor not in panels or ancestor in seen:
                 raise InvalidPanel("invalid_parent")
             seen.add(ancestor)
-            ancestor = panels[ancestor].get("parent")
+            ancestor = panels[ancestor].get(const.CONF_PARENT)
         if mode == WorkMode.SUBAPP and (
-            not parent or panels[parent]["work_mode"] != WorkMode.INGRESS
+            not parent or panels[parent][const.CONF_WORK_MODE] != WorkMode.INGRESS
         ):
             raise InvalidPanel("invalid_parent")
         if parent:
             child = slug.removeprefix(f"{parent}_")
             root = parent
-            if grandparent := panels[parent].get("parent"):
-                if mode != WorkMode.SUBAPP or panels[grandparent].get("parent"):
+            if grandparent := panels[parent].get(const.CONF_PARENT):
+                if mode != WorkMode.SUBAPP or panels[grandparent].get(const.CONF_PARENT):
                     raise InvalidPanel("invalid_parent")
                 root = grandparent
                 child = f"{parent.removeprefix(f'{grandparent}_')}-{child}"
@@ -315,7 +328,7 @@ def _validate_panels(hass, panels):
 def _checked_panel(hass, panels, slug, user_input):
     """Validate one submitted panel form against the panels it will join."""
     panel = _panel_from_form(user_input)
-    if not panel.get("title", "").strip():
+    if not panel.get(const.CONF_TITLE, "").strip():
         raise InvalidPanel("invalid_panel")
     candidate, unavailable = _active_panels(panels | {slug: panel})
     if slug in unavailable:
@@ -344,9 +357,13 @@ class IngressPanelFlow(_SubentryFlowBase):
             self._snapshot = entry_snapshot(entry)
         elif self._snapshot != entry_snapshot(entry):
             return self.async_abort(reason="configuration_changed")
-        if entry.data[CONF_MODE] != ConfMode.UI:
+        if entry.data[const.CONF_MODE] != ConfMode.UI:
             return self.async_abort(
-                reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels"
+                reason=(
+                    "agent_panels"
+                    if entry.data[const.CONF_MODE] == ConfMode.AGENT
+                    else "yaml_panels"
+                )
             )
         panels = get_panels(entry)
         errors = {}
@@ -360,8 +377,10 @@ class IngressPanelFlow(_SubentryFlowBase):
                 except InvalidPanel as err:
                     errors["base"] = str(err)
                 else:
-                    title = panel.pop("title")
-                    panel[CONF_SHOW_IN_SIDEBAR] = user_input.get(CONF_SHOW_IN_SIDEBAR, True)
+                    title = panel.pop(const.CONF_TITLE)
+                    panel[const.CONF_SHOW_IN_SIDEBAR] = user_input.get(
+                        const.CONF_SHOW_IN_SIDEBAR, True
+                    )
                     if step_id == "reconfigure":
                         return self.async_update_and_abort(
                             entry, self._get_reconfigure_subentry(), title=title, data=panel
@@ -371,9 +390,9 @@ class IngressPanelFlow(_SubentryFlowBase):
         if suggested is None and self._slug is not None:
             subentry = self._get_reconfigure_subentry()
             panel = deepcopy(dict(subentry.data))
-            visible = panel.pop(CONF_SHOW_IN_SIDEBAR, True)
-            suggested = _panel_form(panel | {"title": subentry.title}) | {
-                CONF_SHOW_IN_SIDEBAR: visible
+            visible = panel.pop(const.CONF_SHOW_IN_SIDEBAR, True)
+            suggested = _panel_form(panel | {const.CONF_TITLE: subentry.title}) | {
+                const.CONF_SHOW_IN_SIDEBAR: visible
             }
         return self.async_show_form(
             step_id=step_id,
@@ -398,9 +417,13 @@ class IngressOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         entry = self.config_entry
-        if entry.data[CONF_MODE] != ConfMode.UI:
+        if entry.data[const.CONF_MODE] != ConfMode.UI:
             return self.async_abort(
-                reason="agent_panels" if entry.data[CONF_MODE] == ConfMode.AGENT else "yaml_panels"
+                reason=(
+                    "agent_panels"
+                    if entry.data[const.CONF_MODE] == ConfMode.AGENT
+                    else "yaml_panels"
+                )
             )
         if not get_panels(entry):
             return await self.async_step_add()
@@ -427,7 +450,7 @@ class IngressOptionsFlow(config_entries.OptionsFlow):
             stored = option_records(self.config_entry)
             stored.pop(user_input["slug"], None)
             return self.async_create_entry(
-                title="", data={**dict(self.config_entry.options), CONF_PANELS: stored}
+                title="", data={**dict(self.config_entry.options), const.CONF_PANELS: stored}
             )
         return self._select_panel("delete")
 
@@ -464,20 +487,22 @@ class IngressOptionsFlow(config_entries.OptionsFlow):
                 except InvalidPanel as err:
                     errors["base"] = str(err)
                 else:
-                    title = panel.pop("title")
+                    title = panel.pop(const.CONF_TITLE)
                     stored = option_records(entry)
                     stored[slug] = option_record(
-                        slug, panel, title, user_input.get(CONF_SHOW_IN_SIDEBAR, True)
+                        slug, panel, title, user_input.get(const.CONF_SHOW_IN_SIDEBAR, True)
                     )
                     return self.async_create_entry(
-                        title="", data={**dict(entry.options), CONF_PANELS: stored}
+                        title="", data={**dict(entry.options), const.CONF_PANELS: stored}
                     )
         suggested = user_input
         if suggested is None and self._slug is not None:
             record = option_records(entry)[self._slug]
-            visible = record.get(CONF_SHOW_IN_SIDEBAR, True)
-            panel = {key: value for key, value in record.items() if key != CONF_SHOW_IN_SIDEBAR}
-            suggested = _panel_form(panel) | {CONF_SHOW_IN_SIDEBAR: visible}
+            visible = record.get(const.CONF_SHOW_IN_SIDEBAR, True)
+            panel = {
+                key: value for key, value in record.items() if key != const.CONF_SHOW_IN_SIDEBAR
+            }
+            suggested = _panel_form(panel) | {const.CONF_SHOW_IN_SIDEBAR: visible}
         return self.async_show_form(
             step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(
@@ -516,13 +541,13 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self.source == config_entries.SOURCE_USER and self._async_current_entries():
             return self.async_abort(reason="already_configured")
         if user_input is not None:
-            self._data[CONF_MODE] = user_input[CONF_MODE]
-            if self._data[CONF_MODE] == ConfMode.AGENT:
+            self._data[const.CONF_MODE] = user_input[const.CONF_MODE]
+            if self._data[const.CONF_MODE] == ConfMode.AGENT:
                 return await self.async_step_my_agent()
-            if self._data[CONF_MODE] == ConfMode.UI and self._snapshot is not None:
+            if self._data[const.CONF_MODE] == ConfMode.UI and self._snapshot is not None:
                 entry = self._get_reconfigure_entry()
-                if entry.data[CONF_MODE] == ConfMode.YAML and not entry.data.get(
-                    CONF_UI_CONFIGURED
+                if entry.data[const.CONF_MODE] == ConfMode.YAML and not entry.data.get(
+                    const.CONF_UI_CONFIGURED
                 ):
                     return await self.async_step_import_yaml()
             return await self.async_step_my_setup()
@@ -531,7 +556,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_MODE, default=self._data.get(CONF_MODE, ConfMode.UI)
+                        const.CONF_MODE, default=self._data.get(const.CONF_MODE, ConfMode.UI)
                     ): _select(ConfMode, translation_key="configuration_mode")
                 }
             ),
@@ -539,7 +564,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_my_agent(self, user_input: dict[str, Any] | None = None):
         errors = {}
-        url = self._data.get(CONF_URL, DEFAULT_URL)
+        url = self._data.get(const.CONF_URL, DEFAULT_URL)
         if user_input is not None:
             import asyncio
             from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -547,7 +572,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             from .client.exceptions import ClientException, InvalidAuth
 
             try:
-                if not (url := user_input[CONF_URL].strip().rstrip("/")):
+                if not (url := user_input[const.CONF_URL].strip().rstrip("/")):
                     raise ClientException
                 if "://" not in url:
                     url = f"http://{url}"
@@ -557,7 +582,7 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         await client.connect()
                 finally:
                     client.disconnect()
-                self._data[CONF_URL] = url
+                self._data[const.CONF_URL] = url
                 return await self.async_step_my_setup()
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
@@ -565,7 +590,9 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="my_agent",
-            data_schema=vol.Schema({vol.Required(CONF_URL, default=url): selector.TextSelector()}),
+            data_schema=vol.Schema(
+                {vol.Required(const.CONF_URL, default=url): selector.TextSelector()}
+            ),
             errors=errors,
         )
 
@@ -576,16 +603,16 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="configuration_changed")
             if panels is not None:
                 replace_panels(self.hass, entry, panels)
-            if self._data[CONF_MODE] == ConfMode.UI:
-                self._data[CONF_UI_CONFIGURED] = True
+            if self._data[const.CONF_MODE] == ConfMode.UI:
+                self._data[const.CONF_UI_CONFIGURED] = True
             result = async_update_and_abort(
                 self, entry, data=self._data, reason="reconfigure_successful"
             )
             if not entry.update_listeners:
                 self.hass.config_entries.async_schedule_reload(entry.entry_id)
             return result
-        if self._data[CONF_MODE] == ConfMode.UI:
-            self._data[CONF_UI_CONFIGURED] = True
+        if self._data[const.CONF_MODE] == ConfMode.UI:
+            self._data[const.CONF_UI_CONFIGURED] = True
         return self.async_create_entry(title=DEFAULT_TITLE, data=self._data)
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
@@ -623,5 +650,5 @@ class IngressConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_import(self, user_input: dict[str, Any] | None = None):
         if self._async_current_entries():
             return self.async_abort(reason="already_configured")
-        self._data[CONF_MODE] = ConfMode.YAML
+        self._data[const.CONF_MODE] = ConfMode.YAML
         return await self.async_step_my_setup()

@@ -2,18 +2,10 @@ import aiohttp
 import asyncio
 from copy import deepcopy
 from homeassistant.components import frontend, http, panel_custom
-from homeassistant.const import (
-    CONF_DEFAULT,
-    CONF_HEADERS,
-    CONF_ICON,
-    CONF_MODE,
-    CONF_NAME,
-    CONF_PATH,
-    CONF_URL,
-)
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession, async_get_clientsession
 import homeassistant.helpers.config_validation as cv
+import inspect
 import os
 import re
 import time
@@ -21,27 +13,12 @@ from typing import TYPE_CHECKING, cast
 import voluptuous as vol
 from yarl import URL
 
+from . import const
 from .const import (
     DOMAIN,
     LOGGER as _LOGGER,
     API_BASE,
     URL_BASE,
-    CONF_COOKIE_NAME,
-    CONF_ENABLE_COMPRESS,
-    CONF_EXPIRE_TIME,
-    CONF_INDEX,
-    CONF_MATCH,
-    CONF_PANELS,
-    CONF_PARENT,
-    CONF_REPLACE,
-    CONF_REWRITE,
-    CONF_STATIC_TOKEN,
-    CONF_TITLE,
-    CONF_TLS_CERTIFICATE,
-    CONF_TLS_MODE,
-    CONF_UI_CONFIGURED,
-    CONF_UI_MODE,
-    CONF_WORK_MODE,
     WorkMode,
     UIMode,
     RewriteMode,
@@ -80,40 +57,45 @@ CONFIG_SCHEMA = vol.Schema(
             vol.Schema(
                 {
                     vol.Optional(panel_custom.CONF_REQUIRE_ADMIN, default=False): cv.boolean,
-                    vol.Optional(CONF_TITLE): cv.string,
-                    vol.Optional(CONF_ICON): cv.icon,
-                    vol.Required(CONF_URL): vol.Any(
+                    vol.Optional(const.CONF_TITLE): cv.string,
+                    vol.Optional(const.CONF_ICON): cv.icon,
+                    vol.Required(const.CONF_URL): vol.Any(
                         cv.string,
                         vol.Schema(
                             {
-                                vol.Required(CONF_MATCH): cv.string,
-                                vol.Required(CONF_REPLACE): cv.string,
-                                vol.Required(CONF_DEFAULT): cv.string,
+                                vol.Required(const.CONF_MATCH): cv.string,
+                                vol.Required(const.CONF_REPLACE): cv.string,
+                                vol.Required(const.CONF_DEFAULT): cv.string,
                             }
                         ),
                     ),
-                    vol.Optional(CONF_INDEX, default=""): cv.string,
-                    vol.Optional(CONF_PARENT): cv.string,
-                    vol.Optional(CONF_WORK_MODE, default=WorkMode.INGRESS): vol.In(list(WorkMode)),
-                    vol.Optional(CONF_UI_MODE, default=UIMode.NORMAL): vol.In(list(UIMode)),
-                    vol.Optional(CONF_HEADERS): vol.Schema({str: cv.string}),
-                    vol.Optional(CONF_REWRITE): [
+                    vol.Optional(const.CONF_INDEX, default=""): cv.string,
+                    vol.Optional(const.CONF_PARENT): cv.string,
+                    vol.Optional(const.CONF_WORK_MODE, default=WorkMode.INGRESS): vol.In(
+                        list(WorkMode)
+                    ),
+                    vol.Optional(const.CONF_UI_MODE, default=UIMode.NORMAL): vol.In(list(UIMode)),
+                    vol.Optional(const.CONF_HEADERS): vol.Schema({str: cv.string}),
+                    vol.Optional(const.CONF_REWRITE): [
                         vol.Schema(
                             {
-                                vol.Required(CONF_MODE): vol.In(list(RewriteMode)),
-                                vol.Optional(CONF_PATH): cv.string,
-                                vol.Optional(CONF_NAME): cv.string,
-                                vol.Required(CONF_MATCH): cv.string,
-                                vol.Required(CONF_REPLACE): cv.string,
+                                vol.Required(const.CONF_MODE): vol.In(list(RewriteMode)),
+                                vol.Optional(const.CONF_PATH): cv.string,
+                                vol.Optional(const.CONF_NAME): cv.string,
+                                vol.Required(const.CONF_MATCH): cv.string,
+                                vol.Required(const.CONF_REPLACE): cv.string,
                             }
                         )
                     ],
-                    vol.Optional(CONF_COOKIE_NAME): cv.string,
-                    vol.Optional(CONF_STATIC_TOKEN): cv.string,
-                    vol.Optional(CONF_EXPIRE_TIME): cv.positive_int,
-                    vol.Optional(CONF_ENABLE_COMPRESS): cv.boolean,
-                    vol.Optional(CONF_TLS_MODE, default=TLSMode.SYSTEM): vol.In(list(TLSMode)),
-                    vol.Optional(CONF_TLS_CERTIFICATE): cv.string,
+                    vol.Optional(const.CONF_COOKIE_NAME): cv.string,
+                    vol.Optional(const.CONF_STATIC_TOKEN): cv.string,
+                    vol.Optional(const.CONF_EXPIRE_TIME): cv.positive_int,
+                    vol.Optional(const.CONF_ENABLE_COMPRESS): cv.boolean,
+                    vol.Optional(const.CONF_TLS_MODE, default=TLSMode.SYSTEM): vol.In(
+                        list(TLSMode)
+                    ),
+                    vol.Optional(const.CONF_TLS_CERTIFICATE): cv.string,
+                    vol.Optional(const.CONF_SHOW_IN_SIDEBAR): cv.boolean,
                 }
             )
         ),
@@ -139,17 +121,17 @@ async def async_setup(hass: "HomeAssistant", config) -> bool:
 async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
     data = await _async_init(hass)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
-    if entry.data[CONF_MODE] == ConfMode.UI:
+    if entry.data[const.CONF_MODE] == ConfMode.UI:
         config = _ui_config(hass, entry)
         await setup_domain(hass, data, config)
         return True
-    if entry.data[CONF_MODE] == ConfMode.YAML:
+    if entry.data[const.CONF_MODE] == ConfMode.YAML:
         from homeassistant.helpers.reload import async_integration_yaml_config
 
         config = await async_integration_yaml_config(hass, DOMAIN)
         await setup_domain(hass, data, config or {})
         return True
-    if entry.data[CONF_MODE] != ConfMode.AGENT:
+    if entry.data[const.CONF_MODE] != ConfMode.AGENT:
         return True
 
     from homeassistant.const import EVENT_HOMEASSISTANT_STOP
@@ -157,7 +139,7 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     from .client.exceptions import ClientException
 
     # init client
-    client = create_client(hass, entry.data[CONF_URL], async_get_clientsession(hass))
+    client = create_client(hass, entry.data[const.CONF_URL], async_get_clientsession(hass))
     client.on_client_event("ready", on_remote_ready)
 
     # get config
@@ -195,13 +177,13 @@ def _active_panels(panels):
     unavailable = {}
     for slug, panel in panels.items():
         seen = {slug}
-        parent = panel.get(CONF_PARENT)
+        parent = panel.get(const.CONF_PARENT)
         while parent:
             if parent not in panels or parent in seen:
                 unavailable[slug] = parent
                 break
             seen.add(parent)
-            parent = panels[parent].get(CONF_PARENT)
+            parent = panels[parent].get(const.CONF_PARENT)
     return {slug: panel for slug, panel in panels.items() if slug not in unavailable}, unavailable
 
 
@@ -235,14 +217,14 @@ async def async_migrate_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bo
         # Version 1 kept the panels in the entry options, with the sidebar title
         # inside the panel itself. Subentry-aware cores move them into subentries;
         # the others keep them in place, normalised to the same shape.
-        had_panels = CONF_PANELS in entry.options
-        replace_panels(hass, entry, entry.options.get(CONF_PANELS, {}))
+        had_panels = const.CONF_PANELS in entry.options
+        replace_panels(hass, entry, entry.options.get(const.CONF_PANELS, {}))
         options = dict(entry.options)
         if compat.SUPPORTS_SUBENTRIES:
-            options.pop(CONF_PANELS, None)
+            options.pop(const.CONF_PANELS, None)
         data = dict(entry.data)
-        if had_panels or data[CONF_MODE] == ConfMode.UI:
-            data[CONF_UI_CONFIGURED] = True
+        if had_panels or data[const.CONF_MODE] == ConfMode.UI:
+            data[const.CONF_UI_CONFIGURED] = True
         hass.config_entries.async_update_entry(entry, version=2, data=data, options=options)
     return True
 
@@ -294,7 +276,7 @@ async def setup_domain(hass: "HomeAssistant", data: "DomainData", config) -> Non
 
     # add panels
     data["panels"].update(panels)
-    await asyncio.gather(*(panel_custom.async_register_panel(hass, **v) for v in panels.values()))
+    await asyncio.gather(*(_async_register_panel(hass, v) for v in panels.values()))
 
 
 async def _async_init(hass: "HomeAssistant") -> "DomainData":
@@ -326,7 +308,7 @@ async def _async_init(hass: "HomeAssistant") -> "DomainData":
         async def reload_config(call: "ServiceCall"):
             data: DomainData = hass.data[DOMAIN]
             entries = hass.config_entries.async_entries(DOMAIN)
-            if entries and entries[0].data[CONF_MODE] == ConfMode.UI:
+            if entries and entries[0].data[const.CONF_MODE] == ConfMode.UI:
                 config = _ui_config(hass, entries[0])
             elif client := data.get("client"):
                 config = await get_remote_config(hass, client)
@@ -354,6 +336,17 @@ async def get_version(hass: "HomeAssistant", domain: str) -> str:
     return version
 
 
+async def _async_register_panel(hass: "HomeAssistant", panel: dict[str, "Any"]) -> None:
+    """Register a custom panel, dropping keywords this core does not accept.
+
+    ``handle_safe_area`` only exists on newer cores; older ones reject it.
+    """
+    supported = inspect.signature(panel_custom.async_register_panel).parameters
+    if "handle_safe_area" not in supported:
+        panel = {key: value for key, value in panel.items() if key != "handle_safe_area"}
+    return await panel_custom.async_register_panel(hass, **panel)
+
+
 async def _async_register_static_paths(hass_http: "http.HomeAssistantHTTP", configs):
     if hasattr(hass_http, "async_register_static_paths"):
         await hass_http.async_register_static_paths([http.StaticPathConfig(*c) for c in configs])
@@ -374,10 +367,10 @@ def _parse_config(
         ssl_policy = tls_context(data)
         cfg: dict[str, Any]
         ingress_cfg = None
-        work_mode = data[CONF_WORK_MODE]
-        url, front_url = data[CONF_URL], {}
+        work_mode = data[const.CONF_WORK_MODE]
+        url, front_url = data[const.CONF_URL], {}
         if isinstance(url, dict):
-            url, front_url = url[CONF_DEFAULT], url
+            url, front_url = url[const.CONF_DEFAULT], url
         if work_mode not in (WorkMode.IFRAME, WorkMode.CUSTOM):
             # init backend config
             ingress_cfg = dict(mode=work_mode, name=name, entry=name, ssl=ssl_policy)
@@ -390,24 +383,24 @@ def _parse_config(
                 if pos > 0:
                     url, sub_path = url[:pos], url[pos:]
                 headers = {}
-                for k, v in data.get(CONF_HEADERS, {}).items():
+                for k, v in data.get(const.CONF_HEADERS, {}).items():
                     headers[std_header_name(k)] = v.replace(placeholder, ingress_path)
                 ingress_cfg.update(
                     origin=URL(url),
                     sub_path=sub_path,
                     headers=headers,
-                    cookie_name=data.get(CONF_COOKIE_NAME),
-                    expire_time=data.get(CONF_EXPIRE_TIME),
-                    static_token=data.get(CONF_STATIC_TOKEN),
-                    enable_compress=data.get(CONF_ENABLE_COMPRESS),
+                    cookie_name=data.get(const.CONF_COOKIE_NAME),
+                    expire_time=data.get(const.CONF_EXPIRE_TIME),
+                    static_token=data.get(const.CONF_STATIC_TOKEN),
+                    enable_compress=data.get(const.CONF_ENABLE_COMPRESS),
                 )
                 url += sub_path
                 if work_mode in (WorkMode.INGRESS, WorkMode.SUBAPP):
                     rewrites: list[RewriteCfg] = []
-                    if rewrite := data.get(CONF_REWRITE):
+                    if rewrite := data.get(const.CONF_REWRITE):
                         ingress_path = re.escape(ingress_path)
                         for item in rewrite:
-                            item[CONF_REPLACE] = item[CONF_REPLACE].replace(
+                            item[const.CONF_REPLACE] = item[const.CONF_REPLACE].replace(
                                 placeholder, ingress_path
                             )
                             rewrites.append(RewriteCfg(**item))
@@ -415,7 +408,7 @@ def _parse_config(
             ingress_cfg = IngressCfg(**ingress_cfg)
             cfgs.append(ingress_cfg)
             # init frontend config
-            cfg = {"token": ingress_cfg.token, "index": data[CONF_INDEX].lstrip("/")}
+            cfg = {"token": ingress_cfg.token, "index": data[const.CONF_INDEX].lstrip("/")}
             if work_mode == WorkMode.AUTH:
                 cfg["url"] = front_url
                 cfg["field"] = ingress_cfg.cookie_name
@@ -425,17 +418,17 @@ def _parse_config(
                 ingresses[name] = ingress_cfg
         else:
             cfg = {"url": front_url}
-            if data[CONF_INDEX]:
+            if data[const.CONF_INDEX]:
                 url = url.rstrip("/")
-                cfg["index"] = data[CONF_INDEX].lstrip("/")
-        if front_url.get(CONF_MATCH):
-            front_url[CONF_DEFAULT] = url
+                cfg["index"] = data[const.CONF_INDEX].lstrip("/")
+        if front_url.get(const.CONF_MATCH):
+            front_url[const.CONF_DEFAULT] = url
         elif "url" in cfg:
             cfg["url"] = url
 
-        cfg["ui_mode"] = work_mode if work_mode == WorkMode.CUSTOM else data[CONF_UI_MODE]
-        title, icon = data.get(CONF_TITLE), data.get(CONF_ICON)
-        if parent := data.get(CONF_PARENT):
+        cfg["ui_mode"] = work_mode if work_mode == WorkMode.CUSTOM else data[const.CONF_UI_MODE]
+        title, icon = data.get(const.CONF_TITLE), data.get(const.CONF_ICON)
+        if parent := data.get(const.CONF_PARENT):
             if name.startswith(parent) and name[len(parent) : len(parent) + 1] == "_":
                 name = name[len(parent) + 1 :]
             if ingress_cfg:
@@ -446,6 +439,13 @@ def _parse_config(
                 cfg["icon"] = icon
             children.append((name, parent, cfg, ingress_cfg))
             continue
+
+        if not data.get(const.CONF_SHOW_IN_SIDEBAR, True):
+            # Keep the name inside the panel so it still has a header, but register
+            # it without a sidebar entry.
+            if title:
+                cfg["title"] = title
+            title = None
 
         panels[name] = dict(
             webcomponent_name="ha-panel-ingress",

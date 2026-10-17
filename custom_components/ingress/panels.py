@@ -16,15 +16,9 @@ from copy import deepcopy
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from . import compat
+from . import compat, const
 from .compat import ConfigSubentry
-from .const import (
-    CONF_PANELS,
-    CONF_PARENT,
-    CONF_SHOW_IN_SIDEBAR,
-    CONF_TITLE,
-    SUBENTRY_TYPE,
-)
+from .const import SUBENTRY_TYPE
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -38,8 +32,8 @@ def _fold_sidebar(panel: dict[str, "Any"], title: str, visible: bool) -> dict[st
     A panel that is neither in the sidebar nor a child panel keeps no title, so
     it is registered without a sidebar entry.
     """
-    if visible or panel.get(CONF_PARENT):
-        panel[CONF_TITLE] = title
+    if visible or panel.get(const.CONF_PARENT):
+        panel[const.CONF_TITLE] = title
     return panel
 
 
@@ -48,7 +42,7 @@ def _subentry_panels(entry: "ConfigEntry") -> dict[str, dict[str, "Any"]]:
     panels: dict[str, dict[str, "Any"]] = {}
     for subentry in entry.subentries.values():
         panel = deepcopy(dict(subentry.data))
-        visible = panel.pop(CONF_SHOW_IN_SIDEBAR, True)
+        visible = panel.pop(const.CONF_SHOW_IN_SIDEBAR, True)
         panels[subentry.unique_id] = _fold_sidebar(panel, subentry.title, visible)
     return panels
 
@@ -56,10 +50,10 @@ def _subentry_panels(entry: "ConfigEntry") -> dict[str, dict[str, "Any"]]:
 def _option_panels(entry: "ConfigEntry") -> dict[str, dict[str, "Any"]]:
     """Rebuild panels stored in the configuration entry options."""
     panels: dict[str, dict[str, "Any"]] = {}
-    for slug, saved in entry.options.get(CONF_PANELS, {}).items():
+    for slug, saved in entry.options.get(const.CONF_PANELS, {}).items():
         panel = deepcopy(saved)
-        title = panel.pop(CONF_TITLE, None)
-        visible = panel.pop(CONF_SHOW_IN_SIDEBAR, None)
+        title = panel.pop(const.CONF_TITLE, None)
+        visible = panel.pop(const.CONF_SHOW_IN_SIDEBAR, None)
         if visible is None:
             # Records written before the sidebar flag existed followed the same
             # rule the subentry backend uses: no title means no sidebar entry.
@@ -84,8 +78,8 @@ def entry_snapshot(entry: "ConfigEntry"):
 def subentry(slug: str, panel: dict[str, "Any"]) -> "ConfigSubentry":
     """Build the subentry that represents one panel."""
     panel = deepcopy(panel)
-    title = panel.pop(CONF_TITLE, None)
-    panel[CONF_SHOW_IN_SIDEBAR] = bool(title)
+    title = panel.pop(const.CONF_TITLE, None)
+    panel[const.CONF_SHOW_IN_SIDEBAR] = bool(title)
     return ConfigSubentry(
         subentry_type=SUBENTRY_TYPE,
         unique_id=slug,
@@ -99,14 +93,14 @@ def option_record(
 ) -> dict[str, "Any"]:
     """Build the option record that represents one panel."""
     record = deepcopy(panel)
-    record[CONF_TITLE] = title or slug
-    record[CONF_SHOW_IN_SIDEBAR] = show_in_sidebar
+    record[const.CONF_TITLE] = title or slug
+    record[const.CONF_SHOW_IN_SIDEBAR] = show_in_sidebar
     return record
 
 
 def option_records(entry: "ConfigEntry") -> dict[str, dict[str, "Any"]]:
     """Return the raw stored records of the options backend."""
-    return deepcopy(entry.options.get(CONF_PANELS, {}))
+    return deepcopy(entry.options.get(const.CONF_PANELS, {}))
 
 
 def replace_panels(
@@ -134,11 +128,13 @@ def replace_panels(
     for slug, panel in panels.items():
         # A panel without a title is not shown in the sidebar, exactly like a
         # title-less subentry.
-        title = panel.get(CONF_TITLE)
+        title = panel.get(const.CONF_TITLE)
         stored[slug] = option_record(
             slug,
-            {key: value for key, value in panel.items() if key != CONF_TITLE},
+            {key: value for key, value in panel.items() if key != const.CONF_TITLE},
             title or slug,
             bool(title),
         )
-    hass.config_entries.async_update_entry(entry, options={**entry.options, CONF_PANELS: stored})
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, const.CONF_PANELS: stored}
+    )

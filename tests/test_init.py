@@ -103,6 +103,34 @@ async def test_dynamic_url_is_not_mutated(hass, http):
     assert "router" in hass.data[frontend.DATA_PANELS]
 
 
+async def test_yaml_hidden_panel_keeps_its_title_in_the_config(hass, http):
+    """show_in_sidebar: false drops the sidebar entry but keeps the panel title."""
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.YAML})
+    entry.add_to_hass(hass)
+    yaml_config = CONFIG_SCHEMA(
+        {
+            DOMAIN: {
+                "shown": {CONF_URL: "shown:80", "title": "Shown"},
+                "hidden": {
+                    CONF_URL: "hidden:80",
+                    "title": "Hidden",
+                    "show_in_sidebar": False,
+                },
+            }
+        }
+    )
+    with patch(
+        "homeassistant.helpers.reload.async_integration_yaml_config",
+        return_value=yaml_config,
+    ):
+        assert await async_setup_entry(hass, entry)
+    panels = hass.data[frontend.DATA_PANELS]
+    assert panels["shown"].sidebar_title == "Shown"
+    assert "title" not in panels["shown"].config
+    assert panels["hidden"].sidebar_title is None
+    assert panels["hidden"].config["title"] == "Hidden"
+
+
 async def test_yaml_entry_reloads_current_file(hass, http):
     """YAML setup and service reload use the YAML source."""
     entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.YAML})
