@@ -11,7 +11,7 @@ ${l}</pre>`}return}let u=`
     display: block;
     background-color: var(--primary-background-color);
   }
-`;const d=s==="toolbar";d||(f+=`
+`;const d=s==="toolbar";if(d||(f+=`
   :host {
     box-sizing: border-box;
     padding-top: var(--safe-area-inset-top, 0px);
@@ -19,7 +19,7 @@ ${l}</pre>`}return}let u=`
     padding-left: var(--safe-area-content-inset-left, var(--safe-area-inset-left, 0px));
     padding-right: var(--safe-area-content-inset-right, var(--safe-area-inset-right, 0px));
   }
-`);if(yt()&&(u+='<div id="swipebar"></div>',f+=`
+`),yt()&&(u+='<div id="swipebar"></div>',f+=`
   #swipebar {
     position: fixed;
     top: 0;

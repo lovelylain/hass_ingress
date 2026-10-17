@@ -59,8 +59,7 @@ _or_
 
 ### Graphical configuration
 
-Requires Home Assistant 2025.8 or newer. After installing the integration, restart
-Home Assistant once, then:
+After installing the integration, restart Home Assistant once, then:
 
 1. Open **Settings → Devices & services → Add integration** and select **Ingress**.
 2. Select **Local UI** as the configuration mode.
@@ -71,11 +70,17 @@ Home Assistant once, then:
    Home Assistant. Choose an icon and administrator-only sidebar visibility if needed.
 5. Save. The panel appears without restarting Home Assistant.
 
-Each ingress appears on its own integration row. Use its settings button to edit
-it, or its menu to rename or delete it. The row's name also names the panel;
-**Show in sidebar** controls its top-level sidebar visibility. No device or entity
-is created. Identifiers stay fixed because access URLs and parent relationships
-use them.
+On Home Assistant 2025.8 and newer, each ingress appears on its own integration
+row. Use its settings button to edit it, or its menu to rename or delete it. The
+row's name also names the panel; **Show in sidebar** controls its top-level
+sidebar visibility. No device or entity is created. Identifiers stay fixed
+because access URLs and parent relationships use them.
+
+On older versions the same forms live behind the integration's **Configure**
+button instead, which offers **Add ingress**, **Edit ingress**, and
+**Delete ingress**. Nothing else changes: the fields, the validation, the stored
+values and the resulting panels are identical, and the panels are kept in the
+integration's configuration entry rather than in one row each.
 
 Deleting a parent keeps its children's settings but disables their routes and
 tokens. Home Assistant shows a repair issue. Add the parent again with the same
@@ -313,3 +318,10 @@ python -m venv .venv
 
 The tests use Home Assistant's real config and options flow managers and panel
 registration. They replace network connections and the HTTP server boundary.
+
+Two suites cover the two configuration backends:
+
+- `tests/test_config_flow.py` drives the config subentry flow that Home Assistant
+  2025.8 and newer expose.
+- `tests/test_legacy_core.py` forces the options backend on, so the same forms,
+  validation and stored fields are exercised the way an older core uses them.

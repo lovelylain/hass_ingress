@@ -15,10 +15,9 @@ from custom_components.ingress import (
     async_unload_entry,
     setup_domain,
     async_migrate_entry,
-    _panel_subentry,
-    _subentry_panels,
 )
 from custom_components.ingress.const import DOMAIN, ConfMode
+from custom_components.ingress.panels import get_panels, subentry
 
 
 @pytest.fixture
@@ -43,7 +42,7 @@ async def test_ui_setup_reload_and_restart(hass, http):
         domain=DOMAIN,
         data={CONF_MODE: ConfMode.UI},
         version=2,
-        subentries_data=[_panel_subentry(slug, panel).as_dict() for slug, panel in saved.items()],
+        subentries_data=[subentry(slug, panel).as_dict() for slug, panel in saved.items()],
     )
     entry.add_to_hass(hass)
     frontend.async_register_built_in_panel(hass, "config")
@@ -60,7 +59,7 @@ async def test_ui_setup_reload_and_restart(hass, http):
         old_token = store.get("router").token["value"]
         old_session = store.generate_user_token({"id": "user"})
         assert store.get("router").rewrites[0].replace == "/api/ingress/router/"
-        assert _subentry_panels(entry) == saved
+        assert get_panels(entry) == saved
 
         assert await async_unload_entry(hass, entry)
         assert "router" not in hass.data[frontend.DATA_PANELS]
@@ -70,7 +69,7 @@ async def test_ui_setup_reload_and_restart(hass, http):
         assert await async_setup_entry(hass, entry)
         assert "router" in hass.data[frontend.DATA_PANELS]
         assert store.get("router").token["value"] != old_token
-        assert _subentry_panels(entry) == saved
+        assert get_panels(entry) == saved
 
         hass.config_entries.async_remove_subentry(entry, next(iter(entry.subentries)))
         await hass.services.async_call(DOMAIN, "reload", blocking=True)
@@ -84,16 +83,23 @@ async def test_ui_setup_reload_and_restart(hass, http):
 async def test_dynamic_url_is_not_mutated(hass, http):
     """Parsing must not modify saved frontend URL rules."""
     entry = MockConfigEntry(
-        domain=DOMAIN, version=2, data={CONF_MODE: ConfMode.UI},
-        subentries_data=[_panel_subentry("router", {
-            CONF_URL: {"match": "hass", "replace": "router", "default": "http://router/"},
-            "work_mode": "iframe",
-        }).as_dict()],
+        domain=DOMAIN,
+        version=2,
+        data={CONF_MODE: ConfMode.UI},
+        subentries_data=[
+            subentry(
+                "router",
+                {
+                    CONF_URL: {"match": "hass", "replace": "router", "default": "http://router/"},
+                    "work_mode": "iframe",
+                },
+            ).as_dict()
+        ],
     )
     entry.add_to_hass(hass)
-    original = deepcopy(_subentry_panels(entry))
+    original = deepcopy(get_panels(entry))
     assert await async_setup_entry(hass, entry)
-    assert _subentry_panels(entry) == original
+    assert get_panels(entry) == original
     assert "router" in hass.data[frontend.DATA_PANELS]
 
 
@@ -150,13 +156,26 @@ async def test_native_rename_sidebar_toggle_and_orphan_recovery(hass, http):
 
     panels = {
         "root": {"url": "root:80", "title": "Root"},
-        "root_child": {"url": "child:80", "parent": "root", "work_mode": "ingress", "title": "Child", "static_token": "child-public"},
-        "root_child_tab": {"url": "tab:80", "parent": "root_child", "work_mode": "subapp", "title": "Tab"},
+        "root_child": {
+            "url": "child:80",
+            "parent": "root",
+            "work_mode": "ingress",
+            "title": "Child",
+            "static_token": "child-public",
+        },
+        "root_child_tab": {
+            "url": "tab:80",
+            "parent": "root_child",
+            "work_mode": "subapp",
+            "title": "Tab",
+        },
         "other": {"url": "other:80", "title": "Other"},
     }
     entry = MockConfigEntry(
-        domain=DOMAIN, version=2, data={CONF_MODE: ConfMode.UI},
-        subentries_data=[_panel_subentry(slug, panel).as_dict() for slug, panel in panels.items()],
+        domain=DOMAIN,
+        version=2,
+        data={CONF_MODE: ConfMode.UI},
+        subentries_data=[subentry(slug, panel).as_dict() for slug, panel in panels.items()],
     )
     entry.add_to_hass(hass)
     assert await async_setup_entry(hass, entry)
@@ -167,7 +186,9 @@ async def test_native_rename_sidebar_toggle_and_orphan_recovery(hass, http):
         hass.config_entries.async_update_subentry(entry, root, title="Renamed")
         await hass.services.async_call(DOMAIN, "reload", blocking=True)
         assert hass.data[frontend.DATA_PANELS]["root"].sidebar_title == "Renamed"
-        hass.config_entries.async_update_subentry(entry, root, data={**root.data, "show_in_sidebar": False})
+        hass.config_entries.async_update_subentry(
+            entry, root, data={**root.data, "show_in_sidebar": False}
+        )
         await hass.services.async_call(DOMAIN, "reload", blocking=True)
         assert hass.data[frontend.DATA_PANELS]["root"].sidebar_title is None
         store = hass.data[DOMAIN]["config"]
@@ -184,7 +205,7 @@ async def test_native_rename_sidebar_toggle_and_orphan_recovery(hass, http):
         assert len(entry.subentries) == 3
         issue_id = f"missing_parent_{entry.entry_id}"
         assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
-        hass.config_entries.async_add_subentry(entry, _panel_subentry("root", panels["root"]))
+        hass.config_entries.async_add_subentry(entry, subentry("root", panels["root"]))
         await hass.services.async_call(DOMAIN, "reload", blocking=True)
         assert store.get("root_child") is not None
         assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
@@ -192,14 +213,24 @@ async def test_native_rename_sidebar_toggle_and_orphan_recovery(hass, http):
 
 
 async def test_migrates_first_trial_panels_once_without_mutating_values(hass):
-    panels = {"hidden": {"url": "app:80", "headers": {"Authorization": "secret"}, "static_token": "public"},
-              "shown": {"url": "shown:80", "title": "Shown"}}
-    entry = MockConfigEntry(domain=DOMAIN, data={CONF_MODE: ConfMode.UI}, options={"panels": deepcopy(panels)})
+    panels = {
+        "hidden": {
+            "url": "app:80",
+            "headers": {"Authorization": "secret"},
+            "static_token": "public",
+        },
+        "shown": {"url": "shown:80", "title": "Shown"},
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={CONF_MODE: ConfMode.UI}, options={"panels": deepcopy(panels)}
+    )
     entry.add_to_hass(hass)
     assert await async_migrate_entry(hass, entry)
     assert entry.version == 2 and entry.options == {}
-    assert _subentry_panels(entry) == panels
-    hidden = next(subentry for subentry in entry.subentries.values() if subentry.unique_id == "hidden")
+    assert get_panels(entry) == panels
+    hidden = next(
+        subentry for subentry in entry.subentries.values() if subentry.unique_id == "hidden"
+    )
     assert hidden.title == "hidden" and not hidden.data["show_in_sidebar"]
     assert await async_migrate_entry(hass, entry)
     assert len(entry.subentries) == 2

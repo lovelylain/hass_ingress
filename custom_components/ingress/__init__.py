@@ -1,8 +1,6 @@
 import aiohttp
 import asyncio
 from copy import deepcopy
-from types import MappingProxyType
-from homeassistant.config_entries import ConfigSubentry
 from homeassistant.components import frontend, http, panel_custom
 from homeassistant.const import (
     CONF_DEFAULT,
@@ -28,16 +26,35 @@ from .const import (
     LOGGER as _LOGGER,
     API_BASE,
     URL_BASE,
+    CONF_COOKIE_NAME,
+    CONF_ENABLE_COMPRESS,
+    CONF_EXPIRE_TIME,
+    CONF_INDEX,
+    CONF_MATCH,
+    CONF_PANELS,
+    CONF_PARENT,
+    CONF_REPLACE,
+    CONF_REWRITE,
+    CONF_STATIC_TOKEN,
+    CONF_TITLE,
+    CONF_TLS_CERTIFICATE,
+    CONF_TLS_MODE,
+    CONF_UI_CONFIGURED,
+    CONF_UI_MODE,
+    CONF_WORK_MODE,
     WorkMode,
     UIMode,
     RewriteMode,
     ConfMode,
-    CONF_TLS_MODE,
-    CONF_TLS_CERTIFICATE,
     TLSMode,
 )
+from . import compat
 from .config import IngressStore, IngressCfg, RewriteCfg
 from .ingress import IngressView, std_header_name
+from .panels import (
+    get_panels,
+    replace_panels,
+)
 from .tls import tls_context
 from .websocket_api import async_register_websocket_api
 
@@ -56,20 +73,6 @@ if TYPE_CHECKING:
 VERSION = ""
 CONNECT_TIMEOUT = 20
 
-CONF_TITLE: "Final" = "title"
-CONF_MATCH: "Final" = "match"
-CONF_REPLACE: "Final" = "replace"
-CONF_INDEX: "Final" = "index"
-CONF_PARENT: "Final" = "parent"
-CONF_WORK_MODE: "Final" = "work_mode"
-CONF_UI_MODE: "Final" = "ui_mode"
-CONF_REWRITE: "Final" = "rewrite"
-CONF_COOKIE_NAME: "Final" = "cookie_name"
-CONF_EXPIRE_TIME: "Final" = "expire_time"
-CONF_STATIC_TOKEN: "Final" = "static_token"
-CONF_ENABLE_COMPRESS: "Final" = "enable_compress"
-CONF_SHOW_IN_SIDEBAR: "Final" = "show_in_sidebar"
-CONF_UI_CONFIGURED: "Final" = "ui_configured"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -187,26 +190,6 @@ async def async_reload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> Non
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def _panel_subentry(slug, panel):
-    panel = deepcopy(panel)
-    title = panel.pop(CONF_TITLE, None)
-    panel[CONF_SHOW_IN_SIDEBAR] = bool(title)
-    return ConfigSubentry(
-        subentry_type="panel", unique_id=slug, title=title or slug,
-        data=MappingProxyType(panel),
-    )
-
-
-def _subentry_panels(entry):
-    panels = {}
-    for subentry in entry.subentries.values():
-        panel = deepcopy(dict(subentry.data))
-        if panel.pop(CONF_SHOW_IN_SIDEBAR, True) or panel.get(CONF_PARENT):
-            panel[CONF_TITLE] = subentry.title
-        panels[subentry.unique_id] = panel
-    return panels
-
-
 def _active_panels(panels):
     """Exclude broken parent chains before creating any routes or tokens."""
     unavailable = {}
@@ -225,13 +208,20 @@ def _active_panels(panels):
 def _ui_config(hass, entry):
     from homeassistant.helpers import issue_registry as ir
 
-    panels, unavailable = _active_panels(_subentry_panels(entry))
+    panels, unavailable = _active_panels(get_panels(entry))
     issue_id = f"missing_parent_{entry.entry_id}"
     if unavailable:
         ir.async_create_issue(
-            hass, DOMAIN, issue_id, is_fixable=False,
-            severity=ir.IssueSeverity.WARNING, translation_key="missing_parent",
-            translation_placeholders={"panels": ", ".join(unavailable), "parents": ", ".join(sorted(set(unavailable.values())))},
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="missing_parent",
+            translation_placeholders={
+                "panels": ", ".join(unavailable),
+                "parents": ", ".join(sorted(set(unavailable.values()))),
+            },
         )
     else:
         ir.async_delete_issue(hass, DOMAIN, issue_id)
@@ -242,15 +232,16 @@ async def async_migrate_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bo
     if entry.version > 2:
         return False
     if entry.version == 1:
-        panels = entry.options.get("panels", {})
-        subentries = [_panel_subentry(slug, panel) for slug, panel in panels.items()]
-        for subentry in subentries:
-            if not any(existing.unique_id == subentry.unique_id for existing in entry.subentries.values()):
-                hass.config_entries.async_add_subentry(entry, subentry)
+        # Version 1 kept the panels in the entry options, with the sidebar title
+        # inside the panel itself. Subentry-aware cores move them into subentries;
+        # the others keep them in place, normalised to the same shape.
+        had_panels = CONF_PANELS in entry.options
+        replace_panels(hass, entry, entry.options.get(CONF_PANELS, {}))
         options = dict(entry.options)
-        options.pop("panels", None)
+        if compat.SUPPORTS_SUBENTRIES:
+            options.pop(CONF_PANELS, None)
         data = dict(entry.data)
-        if "panels" in entry.options or data[CONF_MODE] == ConfMode.UI:
+        if had_panels or data[CONF_MODE] == ConfMode.UI:
             data[CONF_UI_CONFIGURED] = True
         hass.config_entries.async_update_entry(entry, version=2, data=data, options=options)
     return True

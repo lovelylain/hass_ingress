@@ -1,13 +1,35 @@
 {
   "config": {
     "abort": {
+      "already_configured": "Ingress 已配置。请添加 ingress，或通过“重新配置”更改模式。",
+      "configuration_changed": "表单打开期间配置已变更，请重新打开以使用最新设置。",
+      "import_cancelled": "已取消导入，YAML 配置未改变。",
       "reconfigure_successful": "重新配置成功"
     },
     "error": {
       "cannot_connect": "连接失败",
-      "invalid_auth": "身份验证无效"
+      "duplicate_headers": "请求头名称必须唯一（不区分大小写）。",
+      "duplicate_panel": "已存在同标识的面板。",
+      "invalid_auth": "身份验证无效",
+      "invalid_headers": "请使用合法的 HTTP 请求头名称和值，且不要包含换行符。",
+      "invalid_panel": "请输入合法的面板标识与配置。",
+      "invalid_parent": "请选择一个存在且无循环的父面板。subapp 需要 ingress 类型的父面板，其他子面板需要顶层父面板。",
+      "invalid_regex": "请检查正则表达式与替换分组。重写规则使用 Python 语法，动态 URL 使用 JavaScript 替换语法（$1、$2）。",
+      "invalid_token": "Cookie 名称和静态令牌只能包含 HTTP token 字符。",
+      "invalid_tls_certificate": "请粘贴一个或多个合法的 PEM 格式 CA 或服务器证书，需包含 BEGIN CERTIFICATE 与 END CERTIFICATE 行。",
+      "invalid_tls_mode": "TLS 选项仅适用于 ingress 或 subapp 模式的 HTTPS 代理。",
+      "invalid_url": "代理模式请输入 HTTP(S) URL 或“主机:端口”；iframe 与自定义模式还可输入 / 开头的相对路径；加载项模式请输入加载项 slug。",
+      "route_conflict": "该面板路由已被其他面板占用。",
+      "yaml_load_failed": "无法加载 YAML 配置，配置模式未改变。"
     },
     "step": {
+      "import_yaml": {
+        "data": {
+          "confirm": "导入面板并切换到本地 UI"
+        },
+        "description": "把 configuration.yaml 中的当前面板复制到本地 UI。已解析的 !secret 值（包括请求头与令牌）会保存到 Home Assistant 配置条目中，此后修改 YAML 不会再更新这些面板。确认即导入并切换模式；取消则保持 YAML 不变。",
+        "title": "导入 YAML 面板"
+      },
       "my_agent": {
         "data": {
           "url": "ingress agent 的 URL"
@@ -22,6 +44,275 @@
         "description": "本地 UI：每个 ingress 都显示在各自的集成条目中。设置完成后，选择“添加 ingress”。\nAgent：连接到已运行的外部 ingress agent。\nYAML：在 configuration.yaml 中管理面板。",
         "title": "Ingress"
       }
+    }
+  },
+  "config_subentries": {
+    "panel": {
+      "abort": {
+        "agent_panels": "这些面板由外部 agent 管理，请在 agent 中配置，或通过“重新配置”切换到本地 UI。",
+        "configuration_changed": "表单打开期间配置已变更，请重新打开以使用最新设置。",
+        "reconfigure_successful": "重新配置成功",
+        "yaml_panels": "这些面板由 configuration.yaml 管理，请通过“重新配置”导入到本地 UI。"
+      },
+      "entry_type": "Ingress",
+      "error": {
+        "cannot_connect": "连接失败",
+        "duplicate_headers": "请求头名称必须唯一（不区分大小写）。",
+        "duplicate_panel": "已存在同标识的面板。",
+        "invalid_auth": "身份验证无效",
+        "invalid_headers": "请使用合法的 HTTP 请求头名称和值，且不要包含换行符。",
+        "invalid_panel": "请输入合法的面板标识与配置。",
+        "invalid_parent": "请选择一个存在且无循环的父面板。subapp 需要 ingress 类型的父面板，其他子面板需要顶层父面板。",
+        "invalid_regex": "请检查正则表达式与替换分组。重写规则使用 Python 语法，动态 URL 使用 JavaScript 替换语法（$1、$2）。",
+        "invalid_token": "Cookie 名称和静态令牌只能包含 HTTP token 字符。",
+        "invalid_tls_certificate": "请粘贴一个或多个合法的 PEM 格式 CA 或服务器证书，需包含 BEGIN CERTIFICATE 与 END CERTIFICATE 行。",
+        "invalid_tls_mode": "TLS 选项仅适用于 ingress 或 subapp 模式的 HTTPS 代理。",
+        "invalid_url": "代理模式请输入 HTTP(S) URL 或“主机:端口”；iframe 与自定义模式还可输入 / 开头的相对路径；加载项模式请输入加载项 slug。",
+        "route_conflict": "该面板路由已被其他面板占用。",
+        "yaml_load_failed": "无法加载 YAML 配置，配置模式未改变。"
+      },
+      "initiate_flow": {
+        "user": "添加 ingress"
+      },
+      "step": {
+        "reconfigure": {
+          "data": {
+            "icon": "侧边栏图标",
+            "require_admin": "仅管理员可见",
+            "show_in_sidebar": "在侧边栏显示",
+            "title": "面板名称",
+            "url": "主 URL 或加载项 slug"
+          },
+          "data_description": {
+            "require_admin": "仅控制侧边栏可见性，不会增加后端鉴权。",
+            "url": "动态 URL 以该地址作为默认值。代理模式接受“主机:端口”；iframe 与自定义模式也接受 / 开头的相对路径。"
+          },
+          "description": "面板标识：{slug}，该标识不可修改。\n\n输入面板地址与侧边栏信息。展开“高级”可配置子面板、鉴权、动态 URL、请求头和有序的响应重写规则。清空可选字段即可删除该设置。请求头值与静态令牌保存在 Home Assistant 配置条目中；静态令牌在修改前长期有效。",
+          "sections": {
+            "advanced": {
+              "data": {
+                "cookie_name": "Cookie 名称",
+                "enable_compress": "压缩响应",
+                "expire_time": "令牌有效期",
+                "headers": "请求头",
+                "index": "索引路径",
+                "parent": "父面板标识",
+                "rewrite": "响应重写规则（按顺序）",
+                "static_token": "静态令牌",
+                "tls_certificate": "受信任证书（PEM 格式）",
+                "tls_mode": "HTTPS 证书校验",
+                "ui_mode": "显示模式",
+                "url_match": "动态 URL 匹配表达式",
+                "url_replace": "动态 URL 替换结果",
+                "work_mode": "工作模式"
+              },
+              "data_description": {
+                "headers": "这些值保存在 Home Assistant 配置条目中。",
+                "static_token": "会生成一个绕过 Home Assistant 登录的公开访问链接。留空则要求登录。",
+                "tls_certificate": "选择“信任指定证书”时必填。粘贴 CA 或服务器证书，不要包含私钥。主机名、证书链与有效期仍会被校验。其他面板保留各自的信任设置。",
+                "tls_mode": "仅适用于 HTTPS 的 ingress 与 subapp 代理。警告：忽略证书错误会关闭服务器身份校验，配置的凭据可能被冒充的服务器获取。"
+              },
+              "name": "高级"
+            }
+          },
+          "title": "配置 ingress"
+        },
+        "user": {
+          "data": {
+            "icon": "侧边栏图标",
+            "require_admin": "仅管理员可见",
+            "show_in_sidebar": "在侧边栏显示",
+            "slug": "面板标识",
+            "title": "面板名称",
+            "url": "主 URL 或加载项 slug"
+          },
+          "data_description": {
+            "require_admin": "仅控制侧边栏可见性，不会增加后端鉴权。",
+            "url": "动态 URL 以该地址作为默认值。代理模式接受“主机:端口”；iframe 与自定义模式也接受 / 开头的相对路径。"
+          },
+          "description": "输入面板地址与侧边栏信息。展开“高级”可配置子面板、鉴权、动态 URL、请求头和有序的响应重写规则。清空可选字段即可删除该设置。请求头值与静态令牌保存在 Home Assistant 配置条目中；静态令牌在修改前长期有效。",
+          "sections": {
+            "advanced": {
+              "data": {
+                "cookie_name": "Cookie 名称",
+                "enable_compress": "压缩响应",
+                "expire_time": "令牌有效期",
+                "headers": "请求头",
+                "index": "索引路径",
+                "parent": "父面板标识",
+                "rewrite": "响应重写规则（按顺序）",
+                "static_token": "静态令牌",
+                "tls_certificate": "受信任证书（PEM 格式）",
+                "tls_mode": "HTTPS 证书校验",
+                "ui_mode": "显示模式",
+                "url_match": "动态 URL 匹配表达式",
+                "url_replace": "动态 URL 替换结果",
+                "work_mode": "工作模式"
+              },
+              "data_description": {
+                "headers": "这些值保存在 Home Assistant 配置条目中。",
+                "static_token": "会生成一个绕过 Home Assistant 登录的公开访问链接。留空则要求登录。",
+                "tls_certificate": "选择“信任指定证书”时必填。粘贴 CA 或服务器证书，不要包含私钥。主机名、证书链与有效期仍会被校验。其他面板保留各自的信任设置。",
+                "tls_mode": "仅适用于 HTTPS 的 ingress 与 subapp 代理。警告：忽略证书错误会关闭服务器身份校验，配置的凭据可能被冒充的服务器获取。"
+              },
+              "name": "高级"
+            }
+          },
+          "title": "添加 ingress"
+        }
+      },
+      "title": "Ingress"
+    }
+  },
+  "options": {
+    "abort": {
+      "agent_panels": "这些面板由外部 agent 管理，请在 agent 中配置，或通过“重新配置”切换到本地 UI。",
+      "configuration_changed": "表单打开期间配置已变更，请重新打开以使用最新设置。",
+      "yaml_panels": "这些面板由 configuration.yaml 管理，请通过“重新配置”导入到本地 UI。"
+    },
+    "error": {
+      "duplicate_headers": "请求头名称必须唯一（不区分大小写）。",
+      "duplicate_panel": "已存在同标识的面板。",
+      "invalid_headers": "请使用合法的 HTTP 请求头名称和值，且不要包含换行符。",
+      "invalid_panel": "请输入合法的面板标识与配置。",
+      "invalid_parent": "请选择一个存在且无循环的父面板。subapp 需要 ingress 类型的父面板，其他子面板需要顶层父面板。",
+      "invalid_regex": "请检查正则表达式与替换分组。重写规则使用 Python 语法，动态 URL 使用 JavaScript 替换语法（$1、$2）。",
+      "invalid_token": "Cookie 名称和静态令牌只能包含 HTTP token 字符。",
+      "invalid_tls_certificate": "请粘贴一个或多个合法的 PEM 格式 CA 或服务器证书，需包含 BEGIN CERTIFICATE 与 END CERTIFICATE 行。",
+      "invalid_tls_mode": "TLS 选项仅适用于 ingress 或 subapp 模式的 HTTPS 代理。",
+      "invalid_url": "代理模式请输入 HTTP(S) URL 或“主机:端口”；iframe 与自定义模式还可输入 / 开头的相对路径；加载项模式请输入加载项 slug。",
+      "route_conflict": "该面板路由已被其他面板占用。"
+    },
+    "step": {
+      "add": {
+        "data": {
+          "icon": "侧边栏图标",
+          "require_admin": "仅管理员可见",
+          "show_in_sidebar": "在侧边栏显示",
+          "slug": "面板标识",
+          "title": "面板名称",
+          "url": "主 URL 或加载项 slug"
+        },
+        "data_description": {
+          "require_admin": "仅控制侧边栏可见性，不会增加后端鉴权。",
+          "url": "动态 URL 以该地址作为默认值。代理模式接受“主机:端口”；iframe 与自定义模式也接受 / 开头的相对路径。"
+        },
+        "description": "输入面板地址与侧边栏信息。展开“高级”可配置子面板、鉴权、动态 URL、请求头和有序的响应重写规则。清空可选字段即可删除该设置。请求头值与静态令牌保存在 Home Assistant 配置条目中；静态令牌在修改前长期有效。",
+        "sections": {
+          "advanced": {
+            "data": {
+              "cookie_name": "Cookie 名称",
+              "enable_compress": "压缩响应",
+              "expire_time": "令牌有效期",
+              "headers": "请求头",
+              "index": "索引路径",
+              "parent": "父面板标识",
+              "rewrite": "响应重写规则（按顺序）",
+              "static_token": "静态令牌",
+              "tls_certificate": "受信任证书（PEM 格式）",
+              "tls_mode": "HTTPS 证书校验",
+              "ui_mode": "显示模式",
+              "url_match": "动态 URL 匹配表达式",
+              "url_replace": "动态 URL 替换结果",
+              "work_mode": "工作模式"
+            },
+            "data_description": {
+              "headers": "这些值保存在 Home Assistant 配置条目中。",
+              "static_token": "会生成一个绕过 Home Assistant 登录的公开访问链接。留空则要求登录。",
+              "tls_certificate": "选择“信任指定证书”时必填。粘贴 CA 或服务器证书，不要包含私钥。主机名、证书链与有效期仍会被校验。其他面板保留各自的信任设置。",
+              "tls_mode": "仅适用于 HTTPS 的 ingress 与 subapp 代理。警告：忽略证书错误会关闭服务器身份校验，配置的凭据可能被冒充的服务器获取。"
+            },
+            "name": "高级"
+          }
+        },
+        "title": "添加 ingress"
+      },
+      "delete": {
+        "data": {
+          "slug": "面板标识"
+        },
+        "description": "选择要删除的 ingress。其路由、令牌与侧边栏条目会立即移除。",
+        "title": "删除 ingress"
+      },
+      "edit": {
+        "data": {
+          "icon": "侧边栏图标",
+          "require_admin": "仅管理员可见",
+          "show_in_sidebar": "在侧边栏显示",
+          "title": "面板名称",
+          "url": "主 URL 或加载项 slug"
+        },
+        "data_description": {
+          "require_admin": "仅控制侧边栏可见性，不会增加后端鉴权。",
+          "url": "动态 URL 以该地址作为默认值。代理模式接受“主机:端口”；iframe 与自定义模式也接受 / 开头的相对路径。"
+        },
+        "description": "面板标识：{slug}，该标识不可修改。\n\n输入面板地址与侧边栏信息。展开“高级”可配置子面板、鉴权、动态 URL、请求头和有序的响应重写规则。清空可选字段即可删除该设置。请求头值与静态令牌保存在 Home Assistant 配置条目中；静态令牌在修改前长期有效。",
+        "sections": {
+          "advanced": {
+            "data": {
+              "cookie_name": "Cookie 名称",
+              "enable_compress": "压缩响应",
+              "expire_time": "令牌有效期",
+              "headers": "请求头",
+              "index": "索引路径",
+              "parent": "父面板标识",
+              "rewrite": "响应重写规则（按顺序）",
+              "static_token": "静态令牌",
+              "tls_certificate": "受信任证书（PEM 格式）",
+              "tls_mode": "HTTPS 证书校验",
+              "ui_mode": "显示模式",
+              "url_match": "动态 URL 匹配表达式",
+              "url_replace": "动态 URL 替换结果",
+              "work_mode": "工作模式"
+            },
+            "data_description": {
+              "headers": "这些值保存在 Home Assistant 配置条目中。",
+              "static_token": "会生成一个绕过 Home Assistant 登录的公开访问链接。留空则要求登录。",
+              "tls_certificate": "选择“信任指定证书”时必填。粘贴 CA 或服务器证书，不要包含私钥。主机名、证书链与有效期仍会被校验。其他面板保留各自的信任设置。",
+              "tls_mode": "仅适用于 HTTPS 的 ingress 与 subapp 代理。警告：忽略证书错误会关闭服务器身份校验，配置的凭据可能被冒充的服务器获取。"
+            },
+            "name": "高级"
+          }
+        },
+        "title": "配置 ingress"
+      },
+      "select_edit": {
+        "data": {
+          "slug": "面板标识"
+        },
+        "description": "选择要配置的面板。保存前，其路由、令牌与侧边栏入口保持不变。",
+        "title": "编辑 ingress"
+      },
+      "init": {
+        "menu_options": {
+          "add": "添加 ingress",
+          "delete": "删除 ingress",
+          "edit": "编辑 ingress"
+        },
+        "title": "Ingress"
+      }
+    }
+  },
+  "selector": {
+    "configuration_mode": {
+      "options": {
+        "agent": "外部 agent",
+        "ui": "本地 UI",
+        "yaml": "YAML"
+      }
+    },
+    "tls_mode": {
+      "options": {
+        "custom": "信任指定证书",
+        "disabled": "忽略证书错误（不安全）",
+        "system": "系统信任（推荐）"
+      }
+    }
+  },
+  "issues": {
+    "missing_parent": {
+      "description": "以下面板已被临时禁用，包括其路由与令牌：{panels}。缺失的父面板：{parents}。请用相同标识重新添加父面板，或在“设置 → 设备与服务 → Ingress”中编辑这些面板所在的行。它们的设置均已保留。",
+      "title": "Ingress 面板缺少父面板"
     }
   }
 }

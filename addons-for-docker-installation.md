@@ -24,12 +24,12 @@ This guide helps you run Home Assistant and addons(equivalent containers) in a c
 
 Not all systems can install Hassio Supervisor, using official addons without Supervisor is impossible because the Supervisor API is essential for addons, so we have to install and configure the equivalent containers ourselves.
 
-| functionality               | hassio          | equivalent containers                                              |
-| --------------------------- | --------------- | ------------------------------------------------------------------ |
-| Install addons              | Addon Store     | Refer to this guide to install with `docker compose` and configure |
-| start, stop, restart addons | Supervisor page | docker command or portainer page                                   |
-| DNS for the host network    | hassio_dns      | simple dns_proxy implemented with nginx                            |
-| Ingress                     | Supervisor      | this project                                                       |
+| functionality | hassio | equivalent containers |
+| --- | --- | --- |
+| Install addons | Addon Store | Refer to this guide to install with `docker compose` and configure |
+| start, stop, restart addons | Supervisor page | docker command or portainer page |
+| DNS for the host network | hassio_dns | simple dns_proxy implemented with nginx |
+| Ingress | Supervisor | this project |
 
 With these efforts, we can obtain a functional experience similar to addons.
 
