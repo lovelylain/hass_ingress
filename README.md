@@ -203,6 +203,7 @@ After you modify the Ingress configuration, you can go to `developer-tools` page
 - **ingress**: map (REQUIRED) Enables the hass_ingress integration. Only allowed once.
   - **panel_name**: map (REQUIRED) Name of the panel. Only allowed once.
     - **title**: string (optional) Friendly title for the panel in the sidebar. Leave unset or empty to hide the sidebar entry.
+    - **show_in_sidebar**: boolean (optional, default: true) Set to false to register the panel without a sidebar entry; the title is kept as the panel header.
     - **icon**: [icon](https://www.home-assistant.io/docs/configuration/customizing-devices/#icon) (optional) Icon for entry.
     - **require_admin**: boolean (optional, default: false) If admin access is required to see this iframe.
     - **work_mode**: string (oneof `ingress` `subapp` `iframe` `auth` `hassio` `custom`, default: ingress)

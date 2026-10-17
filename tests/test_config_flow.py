@@ -10,9 +10,9 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.data_entry_flow import FlowManagerIndexView
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.ingress import CONFIG_SCHEMA, CONF_UI_CONFIGURED, async_reload_entry
+from custom_components.ingress import CONFIG_SCHEMA, async_reload_entry
 from custom_components.ingress.config_flow import _panel_form
-from custom_components.ingress.const import DOMAIN, ConfMode
+from custom_components.ingress.const import CONF_UI_CONFIGURED, DOMAIN, ConfMode
 from custom_components.ingress.config import RewriteCfg
 from custom_components.ingress.ingress import _make_rewrite
 from custom_components.ingress.panels import get_panels, replace_panels, subentry

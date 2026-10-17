@@ -41,6 +41,17 @@ CONF_UI_CONFIGURED: "Final" = "ui_configured"
 CONF_TLS_MODE = "tls_mode"
 CONF_TLS_CERTIFICATE = "tls_certificate"
 
+
+from homeassistant.const import (
+    CONF_DEFAULT,
+    CONF_HEADERS,
+    CONF_ICON,
+    CONF_MODE,
+    CONF_NAME,
+    CONF_PATH,
+    CONF_URL,
+)
+
 #: Key of the panel map inside the config entry options. Only used on cores
 #: without config subentry support.
 CONF_PANELS: "Final" = "panels"
