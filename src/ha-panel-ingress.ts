@@ -109,7 +109,7 @@ class HaPanelIngress extends HTMLElement {
 
     const panel = props.panel as PanelInfo<IngressPanelConfig>;
     let { config, url_path: panelPath } = panel;
-    config.title = panel.title!;
+    panel.title && (config.title = panel.title);
     config.icon = panel.icon!;
     if (config.children) {
       const page = (props.route?.path || "").split("/", 2)[1];
