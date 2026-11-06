@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from homeassistant.components import frontend
 from homeassistant.const import CONF_MODE, CONF_URL
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.ingress import (
     CONFIG_SCHEMA,

@@ -8,7 +8,7 @@ from homeassistant import config_entries
 from homeassistant.components.frontend import DATA_PANELS
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.data_entry_flow import FlowManagerIndexView
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.ingress import CONFIG_SCHEMA, async_reload_entry
 from custom_components.ingress.config_flow import _panel_form
