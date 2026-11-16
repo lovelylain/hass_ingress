@@ -15,6 +15,8 @@ This guide helps you run Home Assistant and addons(equivalent containers) in a c
   - [Node-RED](#node-red)
   - [Zigbee2MQTT](#zigbee2mqtt)
   - [Tandoor Recipes](#tandoor-recipes)
+  - [Portainer](#portainer)
+  - [Pi-hole](#pi-hole)
   - To be continued
 - [Other Services](#other-services)
   - [OpenWrt](#openwrt)
@@ -419,6 +421,98 @@ ingress:
         match: (url\()/(static)/
         replace: \1$http_x_ingress_path/\2/
 ```
+
+### Portainer
+
+Edit `./docker-compose.yml`, then run `docker compose up -d`.
+
+To skip the Portainer login page, create an access token in Portainer (My account > Access tokens) and put it in `./homeassistant/secrets.yaml` as `portainer_api_key`. Ingress sends it as the `X-API-Key` header on every request. Anyone who can open this panel gets the token owner's rights in Portainer, so keep `require_admin: true`. Portainer's Logout button no longer works inside the panel: reloading the page logs you back in. Direct access to Portainer still requires a login.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+docker-compose.yml:
+
+```yaml
+name: ha
+services:
+  portainer:
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer:/data
+```
+
+configuration.yaml:
+
+```yaml
+ingress:
+  portainer:
+    require_admin: true
+    title: Portainer
+    icon: mdi:docker
+    url: portainer:9000
+    headers:
+      # skip the login page, see above
+      X-API-Key: !secret portainer_api_key
+```
+
+Tested with Portainer CE 2.45.3.
+
+### Pi-hole
+
+Edit `./docker-compose.yml`, then run `docker compose up -d`.
+
+Edit `./homeassistant/configuration.yaml` then reload `INGRESS`.
+
+Pi-hole v6 serves its web interface from `/admin/` and its API from `/api/`, so the ingress `url` must point to the server root, with `index: /admin/`. Pi-hole sends `X-Frame-Options: DENY`, which stops the panel loading in the HA frame, so the first rule changes it to `SAMEORIGIN` for the ingress responses only. The web interface builds every API and page URL from the `data-apiurl` and `data-webhome` attributes in its HTML, so rewriting the HTML links and the redirects is enough. You still log in to Pi-hole with its password: it only supports login sessions, not a static token.
+
+docker-compose.yml:
+
+```yaml
+name: ha
+services:
+  pihole:
+    image: pihole/pihole
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - 53:53/tcp
+      - 53:53/udp
+    volumes:
+      - ./pihole:/etc/pihole
+```
+
+configuration.yaml:
+
+```yaml
+ingress:
+  pihole:
+    require_admin: true
+    title: Pi-hole
+    icon: mdi:pi-hole
+    url: pihole:80
+    index: /admin/
+    rewrite:
+      # allow the HA frame to show the Pi-hole page
+      - mode: header
+        name: ^X-Frame-Options$
+        match: DENY
+        replace: SAMEORIGIN
+      # redirects (/ -> /admin/, /admin/ -> /admin/login)
+      - mode: header
+        name: ^Location$
+        match: ^/
+        replace: $http_x_ingress_path/
+      # absolute links in HTML, incl. data-webhome="/admin/" and data-apiurl="/api"
+      - mode: body
+        name: ^text/html$
+        match: (["'])/(admin|api)(?=[/"'])
+        replace: \1$http_x_ingress_path/\2
+```
+
+Tested with Pi-hole v6.9 (FTL).
 
 ## Other Services
 
