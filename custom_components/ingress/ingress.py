@@ -276,12 +276,22 @@ document.querySelector("ha-panel-ingress").setProperties({{panel: {{
             and (clen := int(clen)) <= MAX_SIMPLE_REQUEST_SIZE
         ):
             data = await data.read()
+        if request.query_string:
+            url = URL.build(
+                scheme=url.scheme,
+                user=url.raw_user,
+                password=url.raw_password,
+                host=url.raw_host,
+                port=url.port,
+                path=url.raw_path,
+                query_string=request.query_string,
+                encoded=True,
+            )
         async with self._websession.request(
             request.method,
             url,
             ssl=cfg.ssl,
             headers=_init_header(request, cfg, user),
-            params=request.query,
             allow_redirects=False,
             data=data,
             timeout=DISABLED_TIMEOUT,
